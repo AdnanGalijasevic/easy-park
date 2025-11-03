@@ -2,6 +2,7 @@ using MapsterMapper;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using EasyPark.Model;
 using EasyPark.Model.SearchObjects;
 using EasyPark.Services.Database;
@@ -56,7 +57,7 @@ namespace EasyPark.Services.Services
 
             if (entity == null)
             {
-                throw new EasyPark.Model.UserException("Entity not found");
+                throw new EasyPark.Model.UserException("Entity not found", HttpStatusCode.NotFound);
             }
 
             return Mapper.Map<TModel>(entity);

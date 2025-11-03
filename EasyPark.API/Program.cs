@@ -5,6 +5,7 @@ using EasyPark.Model.Requests;
 using EasyPark.Services.Database;
 using EasyPark.Services.Interfaces;
 using EasyPark.Services.Services;
+using EasyPark.API.Filters;
 using backend;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,8 +14,12 @@ builder.Services.AddHttpContextAccessor();
 
 // Add services to the container.
 builder.Services.AddTransient<IUserService, UserService>();
+builder.Services.AddScoped<EasyPark.API.Filters.ExceptionFilter>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(x =>
+{
+    x.Filters.Add<ExceptionFilter>();
+});
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();

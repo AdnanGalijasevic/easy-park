@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using EasyPark.Model;
 using EasyPark.Model.Models;
@@ -66,18 +67,18 @@ namespace EasyPark.Services.Services
         {
             if (Context.Users.Any(u => u.Username == request.Username))
             {
-                throw new UserException("Username taken");
+                throw new UserException("Username taken", HttpStatusCode.BadRequest);
             }
 
             if (Context.Users.Any(u => u.Email == request.Email))
             {
-                throw new UserException("Email already used");
+                throw new UserException("Email already used", HttpStatusCode.BadRequest);
             }
 
             var pwValidationResult = ValidationHelpers.CheckPasswordStrength(request.Password);
             if (!string.IsNullOrEmpty(pwValidationResult))
             {
-                throw new UserException("Invalid password");
+                throw new UserException("Invalid password", HttpStatusCode.BadRequest);
             }
 
             if (!string.IsNullOrEmpty(request.Phone))
@@ -85,13 +86,13 @@ namespace EasyPark.Services.Services
                 var phoneValidationResult = ValidationHelpers.CheckPhoneNumber(request.Phone);
                 if (!string.IsNullOrEmpty(phoneValidationResult))
                 {
-                    throw new UserException("Invalid phone number");
+                    throw new UserException("Invalid phone number", HttpStatusCode.BadRequest);
                 }
             }
 
             if (request.Password != request.PasswordConfirm)
             {
-                throw new UserException("Password and confirm password are not matching");
+                throw new UserException("Password and confirm password are not matching", HttpStatusCode.BadRequest);
             }
 
             entity.PasswordSalt = HashGenerator.GenerateSalt();
@@ -101,7 +102,7 @@ namespace EasyPark.Services.Services
             var defaultRole = Context.Roles.FirstOrDefault(r => r.Name == "User");
             if (defaultRole == null)
             {
-                throw new Exception("Default 'User' role not found in the database.");
+                throw new UserException("Default 'User' role not found in the database.", HttpStatusCode.InternalServerError);
             }
 
             entity.UserRoles = new List<Database.UserRole>
@@ -118,35 +119,35 @@ namespace EasyPark.Services.Services
             base.BeforeUpdate(request, entity);
 
             if (entity == null)
-                throw new UserException("User entity not found.");
+                throw new UserException("User entity not found.", HttpStatusCode.NotFound);
 
             if (!entity.IsActive)
-                throw new UserException("Cannot update data of an inactive user.");
+                throw new UserException("Cannot update data of an inactive user.", HttpStatusCode.Forbidden);
 
             if (!string.IsNullOrWhiteSpace(request.Phone))
             {
                 var phoneError = ValidationHelpers.CheckPhoneNumber(request.Phone);
                 if (!string.IsNullOrEmpty(phoneError))
-                    throw new UserException("Invalid phone number");
+                    throw new UserException("Invalid phone number", HttpStatusCode.BadRequest);
             }
 
             if (!string.IsNullOrWhiteSpace(request.NewPassword))
             {
                 if (string.IsNullOrWhiteSpace(request.CurrentPassword))
-                    throw new UserException("Current password is required to change your password.");
+                    throw new UserException("Current password is required to change your password.", HttpStatusCode.BadRequest);
 
                 var isCurrentPasswordValid = entity.PasswordHash ==
                     HashGenerator.GenerateHash(entity.PasswordSalt, request.CurrentPassword);
 
                 if (!isCurrentPasswordValid)
-                    throw new UserException("Current password is incorrect.");
+                    throw new UserException("Current password is incorrect.", HttpStatusCode.Unauthorized);
 
                 var pwError = ValidationHelpers.CheckPasswordStrength(request.NewPassword);
                 if (!string.IsNullOrEmpty(pwError))
-                    throw new UserException("Invalid password");
+                    throw new UserException("Invalid password", HttpStatusCode.BadRequest);
 
                 if (request.NewPassword != request.NewPasswordConfirm)
-                    throw new UserException("New password and confirmation do not match.");
+                    throw new UserException("New password and confirmation do not match.", HttpStatusCode.BadRequest);
 
                 entity.PasswordSalt = HashGenerator.GenerateSalt();
                 entity.PasswordHash = HashGenerator.GenerateHash(entity.PasswordSalt, request.NewPassword);
@@ -185,7 +186,7 @@ namespace EasyPark.Services.Services
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             {
-                throw new UserException("Username and password are required");
+                throw new UserException("Username and password are required", HttpStatusCode.BadRequest);
             }
 
             var entity = Context.Users
@@ -195,19 +196,19 @@ namespace EasyPark.Services.Services
 
             if (entity == null)
             {
-                throw new UserException("User not found");
+                throw new UserException("User not found", HttpStatusCode.Unauthorized);
             }
 
             if (!entity.IsActive)
             {
-                throw new UserException("Your account has been deactivated. Please contact the administrator for help.");
+                throw new UserException("Your account has been deactivated. Please contact the administrator for help.", HttpStatusCode.Forbidden);
             }
 
             var hash = HashGenerator.GenerateHash(entity.PasswordSalt, password);
 
             if (hash != entity.PasswordHash)
             {
-                throw new UserException("Invalid username or password");
+                throw new UserException("Invalid username or password", HttpStatusCode.Unauthorized);
             }
 
             return Mapper.Map<Model.Models.User>(entity);
@@ -222,12 +223,12 @@ namespace EasyPark.Services.Services
                 .FirstOrDefault(u => u.Id == userId);
 
             if (user == null)
-                throw new UserException("User not found.");
+                throw new UserException("User not found.", HttpStatusCode.NotFound);
 
             bool isAdmin = user.UserRoles.Any(ur => ur.Role.Name == "Admin");
 
             if (!request.IsActive && isAdmin)
-                throw new UserException("Cannot deactivate a user with the Admin role.");
+                throw new UserException("Cannot deactivate a user with the Admin role.", HttpStatusCode.Forbidden);
 
             user.IsActive = request.IsActive;
             Context.SaveChanges();
