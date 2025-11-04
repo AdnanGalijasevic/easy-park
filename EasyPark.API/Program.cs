@@ -14,6 +14,7 @@ builder.Services.AddHttpContextAccessor();
 
 // Add services to the container.
 builder.Services.AddTransient<IUserService, UserService>();
+builder.Services.AddTransient<IParkingLocationService, ParkingLocationService>();
 builder.Services.AddScoped<EasyPark.API.Filters.ExceptionFilter>();
 
 builder.Services.AddControllers(x =>
@@ -54,6 +55,13 @@ TypeAdapterConfig<UserUpdateRequest, EasyPark.Services.Database.User>
 
 TypeAdapterConfig<EasyPark.Services.Database.User, EasyPark.Model.Models.User>.NewConfig()
     .Map(dest => dest.Roles, src => src.UserRoles.Select(ur => ur.Role.Name).ToList());
+
+TypeAdapterConfig<ParkingLocationUpdateRequest, EasyPark.Services.Database.ParkingLocation>
+    .NewConfig()
+    .IgnoreNullValues(true);
+
+TypeAdapterConfig<EasyPark.Services.Database.ParkingLocation, EasyPark.Model.Models.ParkingLocation>.NewConfig()
+    .Map(dest => dest.CreatedByName, src => src.CreatedByUser.FirstName + " " + src.CreatedByUser.LastName);
 
 builder.Services.AddAuthentication("BasicAuthentication").AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>("BasicAuthentication", null);
 

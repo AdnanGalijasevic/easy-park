@@ -40,7 +40,9 @@ namespace backend
                 var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, user.FirstName),
-                    new Claim(ClaimTypes.NameIdentifier, user.Username)
+                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new Claim("UserId", user.Id.ToString()),
+                    new Claim("Username", user.Username)
                 };
 
                 foreach (var role in roles)
