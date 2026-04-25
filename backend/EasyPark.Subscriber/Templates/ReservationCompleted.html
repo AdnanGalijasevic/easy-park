@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title>EasyPark Reservation Completed</title>
+</head>
+<body style="margin:0; padding:0; font-family: Arial, Helvetica, sans-serif; background-color:#f5f7fa;">
+    <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; margin:20px auto; border-radius:8px; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
+        <tr>
+            <td style="background: #2F855A; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; color: white;">
+                <h2 style="margin:0; font-size:22px;">EasyPark</h2>
+                <p style="margin:0; font-size:14px;">Reservation Completed</p>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding:20px; color:#333;">
+                <h3 style="margin-top:0;">Hello {{Name}},</h3>
+                <p style="margin:0; font-size:14px; color:#333;">
+                    Your parking reservation has been
+                    <span style="
+                                display: inline-block;
+                                background-color: #2F855A;
+                                color: white;
+                                padding: 4px 10px;
+                                border-radius: 4px;
+                                font-weight: bold;
+                                font-size: 12px;
+                                vertical-align: middle;
+                                margin-left: 8px;
+                            ">
+                        COMPLETED
+                    </span>
+                </p>
+
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0; border-collapse:collapse;">
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eee;"><strong>Reservation ID:</strong></td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">{{ReservationId}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eee;"><strong>Parking Location:</strong></td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">{{ParkingLocationName}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eee;"><strong>Spot Number:</strong></td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">{{SpotNumber}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eee;"><strong>Start Time:</strong></td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">{{StartTime}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eee;"><strong>End Time:</strong></td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">{{EndTime}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px;"><strong>Total Paid:</strong></td>
+                        <td style="padding:8px;">{{TotalPrice}} BAM</td>
+                    </tr>
+                </table>
+
+                <p style="margin-top:20px; color:#333;">
+                    Thank you for using EasyPark! We hope you had a great experience. Please consider leaving a review to help other users.
+                </p>
+
+                <p style="margin-top:20px;">Thank you for using <strong>EasyPark</strong>!</p>
+            </td>
+        </tr>
+        <tr>
+            <td style="background:#f0f0f0; padding:15px; font-size:12px; color:#777; text-align:center; border-radius:0 0 8px 8px;">
+                © 2025 EasyPark. All rights reserved.
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+

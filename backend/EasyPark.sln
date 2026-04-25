@@ -1,0 +1,49 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35327.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyPark.API", "EasyPark.API\EasyPark.API.csproj", "{CD84F8F6-9DA4-44AA-A21C-FF8BD3094946}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyPark.Model", "EasyPark.Model\EasyPark.Model.csproj", "{BF998880-94DE-464E-BBB5-CF33E9BBBFB1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyPark.Services", "EasyPark.Services\EasyPark.Services.csproj", "{46F7E1FE-D583-4179-9B8F-9BC6576AA07D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{175D2D4F-761F-41FA-ADB9-666739969506}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+		Dockerfile = Dockerfile
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyPark.Tests", "EasyPark.Tests\EasyPark.Tests.csproj", "{781601E4-261B-4C5C-A634-F378C09C1729}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CD84F8F6-9DA4-44AA-A21C-FF8BD3094946}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD84F8F6-9DA4-44AA-A21C-FF8BD3094946}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD84F8F6-9DA4-44AA-A21C-FF8BD3094946}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD84F8F6-9DA4-44AA-A21C-FF8BD3094946}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BF998880-94DE-464E-BBB5-CF33E9BBBFB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF998880-94DE-464E-BBB5-CF33E9BBBFB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF998880-94DE-464E-BBB5-CF33E9BBBFB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF998880-94DE-464E-BBB5-CF33E9BBBFB1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{46F7E1FE-D583-4179-9B8F-9BC6576AA07D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{46F7E1FE-D583-4179-9B8F-9BC6576AA07D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{46F7E1FE-D583-4179-9B8F-9BC6576AA07D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{46F7E1FE-D583-4179-9B8F-9BC6576AA07D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{781601E4-261B-4C5C-A634-F378C09C1729}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{781601E4-261B-4C5C-A634-F378C09C1729}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{781601E4-261B-4C5C-A634-F378C09C1729}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{781601E4-261B-4C5C-A634-F378C09C1729}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {45AB4CD8-2E50-428D-B86F-ACE81655EBBE}
+	EndGlobalSection
+EndGlobal
