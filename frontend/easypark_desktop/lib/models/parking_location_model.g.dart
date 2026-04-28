@@ -1,0 +1,113 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'parking_location_model.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+ParkingLocation _$ParkingLocationFromJson(Map<String, dynamic> json) =>
+    ParkingLocation(
+      id: (json['id'] as num).toInt(),
+      name: json['name'] as String,
+      address: json['address'] as String,
+      cityId: (json['cityId'] as num).toInt(),
+      city: json['cityName'] as String,
+      postalCode: json['postalCode'] as String?,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      description: json['description'] as String?,
+      totalSpots: (json['totalSpots'] as num).toInt(),
+      pricePerHour: (json['pricePerHour'] as num).toDouble(),
+      pricePerDay: (json['pricePerDay'] as num?)?.toDouble(),
+      priceRegular: (json['priceRegular'] as num?)?.toDouble() ?? 0,
+      priceDisabled: (json['priceDisabled'] as num?)?.toDouble() ?? 0,
+      priceElectric: (json['priceElectric'] as num?)?.toDouble() ?? 0,
+      priceCovered: (json['priceCovered'] as num?)?.toDouble() ?? 0,
+      photo: json['photo'] as String?,
+      createdByName: json['createdByName'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : DateTime.parse(json['updatedAt'] as String),
+      isActive: json['isActive'] as bool,
+      hasVideoSurveillance: json['hasVideoSurveillance'] as bool,
+      hasNightSurveillance: json['hasNightSurveillance'] as bool,
+      hasDisabledSpots: json['hasDisabledSpots'] as bool,
+      hasRamp: json['hasRamp'] as bool,
+      is24Hours: json['is24Hours'] as bool,
+      hasOnlinePayment: json['hasOnlinePayment'] as bool,
+      hasElectricCharging: json['hasElectricCharging'] as bool,
+      hasCoveredSpots: json['hasCoveredSpots'] as bool,
+      hasSecurityGuard: json['hasSecurityGuard'] as bool,
+      maxVehicleHeight: (json['maxVehicleHeight'] as num?)?.toDouble(),
+      averageRating: (json['averageRating'] as num).toDouble(),
+      totalReviews: (json['totalReviews'] as num).toInt(),
+      distanceFromCenter: (json['distanceFromCenter'] as num?)?.toDouble(),
+      parkingType: json['parkingType'] as String?,
+      operatingHours: json['operatingHours'] as String?,
+      safetyRating: (json['safetyRating'] as num?)?.toDouble(),
+      cleanlinessRating: (json['cleanlinessRating'] as num?)?.toDouble(),
+      accessibilityRating: (json['accessibilityRating'] as num?)?.toDouble(),
+      popularityScore: (json['popularityScore'] as num?)?.toDouble(),
+      lastMaintenanceDate: json['lastMaintenanceDate'] == null
+          ? null
+          : DateTime.parse(json['lastMaintenanceDate'] as String),
+      hasWifi: json['hasWifi'] as bool,
+      hasRestroom: json['hasRestroom'] as bool,
+      hasAttendant: json['hasAttendant'] as bool,
+      paymentOptions: json['paymentOptions'] as String?,
+      parkingSpots: (json['parkingSpots'] as List<dynamic>?)
+          ?.map((e) => ParkingSpot.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+
+Map<String, dynamic> _$ParkingLocationToJson(ParkingLocation instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'address': instance.address,
+      'cityId': instance.cityId,
+      'cityName': instance.city,
+      'postalCode': instance.postalCode,
+      'latitude': instance.latitude,
+      'longitude': instance.longitude,
+      'description': instance.description,
+      'totalSpots': instance.totalSpots,
+      'pricePerHour': instance.pricePerHour,
+      'pricePerDay': instance.pricePerDay,
+      'priceRegular': instance.priceRegular,
+      'priceDisabled': instance.priceDisabled,
+      'priceElectric': instance.priceElectric,
+      'priceCovered': instance.priceCovered,
+      'photo': instance.photo,
+      'createdByName': instance.createdByName,
+      'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt?.toIso8601String(),
+      'isActive': instance.isActive,
+      'hasVideoSurveillance': instance.hasVideoSurveillance,
+      'hasNightSurveillance': instance.hasNightSurveillance,
+      'hasDisabledSpots': instance.hasDisabledSpots,
+      'hasRamp': instance.hasRamp,
+      'is24Hours': instance.is24Hours,
+      'hasOnlinePayment': instance.hasOnlinePayment,
+      'hasElectricCharging': instance.hasElectricCharging,
+      'hasCoveredSpots': instance.hasCoveredSpots,
+      'hasSecurityGuard': instance.hasSecurityGuard,
+      'maxVehicleHeight': instance.maxVehicleHeight,
+      'averageRating': instance.averageRating,
+      'totalReviews': instance.totalReviews,
+      'distanceFromCenter': instance.distanceFromCenter,
+      'parkingType': instance.parkingType,
+      'operatingHours': instance.operatingHours,
+      'safetyRating': instance.safetyRating,
+      'cleanlinessRating': instance.cleanlinessRating,
+      'accessibilityRating': instance.accessibilityRating,
+      'popularityScore': instance.popularityScore,
+      'lastMaintenanceDate': instance.lastMaintenanceDate?.toIso8601String(),
+      'hasWifi': instance.hasWifi,
+      'hasRestroom': instance.hasRestroom,
+      'hasAttendant': instance.hasAttendant,
+      'paymentOptions': instance.paymentOptions,
+      'parkingSpots': instance.parkingSpots,
+    };
