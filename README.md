@@ -1,6 +1,7 @@
 # EasyPark
 
 EasyPark consists of:
+
 - `backend` (.NET API + Subscriber + SQL Server + RabbitMQ)
 - `frontend/easypark_desktop` (Flutter desktop admin app)
 - `frontend/easypark_mobile` (Flutter mobile client app)
@@ -8,6 +9,7 @@ EasyPark consists of:
 ## 1) Run backend (RSII-ready)
 
 Prerequisites:
+
 - Docker Desktop
 
 From `backend` folder:
@@ -17,6 +19,7 @@ docker-compose up -d --build
 ```
 
 Main URLs:
+
 - API: `http://localhost:8080`
 - Swagger: `http://localhost:8080/swagger`
 - RabbitMQ UI: `http://localhost:15672`
@@ -49,10 +52,18 @@ For physical device, replace `API_BASE` with your machine IP.
 
 ## 4) Test credentials
 
-| Context | Username | Password |
-|---------|----------|---------|
-| Desktop (admin) | desktop | test |
-| Mobile (user) | mobile | test |
-| Admin role | admin | test |
-| User role | user | test |
+| Context         | Username | Password |
+| --------------- | -------- | -------- |
+| Desktop (admin) | desktop  | test     |
+| Mobile (user)   | mobile   | test     |
 
+## 5) Secret env files
+
+- Backend env archive location: `backend/.env.7p`
+- Unzip this archive into: `backend/.env`
+- Mobile env archive location: `frontend/easypark_mobile/.env.7p`
+- Unzip this archive into: `frontend/easypark_mobile/.env`
+
+If you build the mobile app again, update values in:
+
+- `frontend/easypark_mobile/.env`

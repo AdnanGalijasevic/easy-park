@@ -26,11 +26,6 @@ Future<void> main() async {
     await dotenv.load(fileName: '.env');
   } catch (e) {
     debugPrint('dotenv .env: $e');
-    try {
-      await dotenv.load(fileName: 'assets/config.env');
-    } catch (e2) {
-      debugPrint('dotenv config.env: $e2');
-    }
   }
 
   Stripe.publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'] ?? '';
