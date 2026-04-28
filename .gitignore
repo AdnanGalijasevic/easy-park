@@ -160,7 +160,6 @@ $RECYCLE.BIN/
 .env.local
 .env.*.local
 **/.env
-**/.env.7z
 **/config.env
 **/assets/config.env
 **/appsettings.Development.json
