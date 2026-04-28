@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:easypark_mobile/providers/auth_provider.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
+import 'package:easypark_mobile/utils/input_validators.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -53,12 +55,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_birthDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select your birth date'),
-          backgroundColor: EasyParkColors.accent,
-        ),
-      );
+      AppFeedback.info('Please select your birth date');
       return;
     }
 
@@ -73,15 +70,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         passwordConfirm: _passwordConfirmController.text,
         birthDate: _birthDate!,
       );
-      // AuthWrapper will automatically navigate to MainLayout on success
+      if (mounted) {
+        AppFeedback.success('Account created successfully.');
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
-            backgroundColor: EasyParkColors.error,
-          ),
-        );
+        AppFeedback.error(e.toString().replaceFirst('Exception: ', ''));
       }
     }
   }
@@ -101,7 +96,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Header
                 Icon(Icons.local_parking, size: 56, color: colorScheme.primary),
                 const SizedBox(height: 8),
                 Text(
@@ -121,7 +115,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Name row
                 Row(
                   children: [
                     Expanded(
@@ -134,10 +127,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           border: OutlineInputBorder(),
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Required';
-                          }
-                          return null;
+                          return InputValidators.requiredText(v, 'First name');
                         },
                       ),
                     ),
@@ -151,10 +141,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           border: OutlineInputBorder(),
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Required';
-                          }
-                          return null;
+                          return InputValidators.requiredText(v, 'Last name');
                         },
                       ),
                     ),
@@ -162,7 +149,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Username
                 TextFormField(
                   controller: _usernameController,
                   decoration: const InputDecoration(
@@ -171,15 +157,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Required';
-                    if (v.trim().length < 3) return 'Min 3 characters';
-                    if (v.trim().length > 20) return 'Max 20 characters';
+                    final required = InputValidators.requiredText(v, 'Username');
+                    if (required != null) return required;
+                    final username = v!.trim();
+                    if (username.length < 3) return 'Min 3 characters';
+                    if (username.length > 20) return 'Max 20 characters';
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Email
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -188,18 +175,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: Icon(Icons.email_outlined),
                     border: OutlineInputBorder(),
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Required';
-                    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-                    if (!emailRegex.hasMatch(v.trim())) {
-                      return 'Invalid email';
-                    }
-                    return null;
-                  },
+                  validator: InputValidators.email,
                 ),
                 const SizedBox(height: 16),
 
-                // Phone
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
@@ -208,14 +187,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: Icon(Icons.phone_outlined),
                     border: OutlineInputBorder(),
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Required';
-                    return null;
-                  },
+                  validator: InputValidators.phoneRequired,
                 ),
                 const SizedBox(height: 16),
 
-                // Birth date
                 GestureDetector(
                   onTap: _pickBirthDate,
                   child: AbsorbPointer(
@@ -239,7 +214,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Password
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -258,14 +232,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'Required';
-                    if (v.length < 6) return 'Min 6 characters';
-                    return null;
+                    return InputValidators.passwordStrong(v);
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Confirm password
                 TextFormField(
                   controller: _passwordConfirmController,
                   obscureText: _obscureConfirm,
@@ -284,7 +255,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'Required';
+                    final required = InputValidators.requiredText(
+                      v,
+                      'Password confirmation',
+                    );
+                    if (required != null) return required;
                     if (v != _passwordController.text) {
                       return 'Passwords do not match';
                     }
@@ -293,7 +268,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Register button
                 ElevatedButton(
                   onPressed: isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
@@ -323,7 +297,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Back to login
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

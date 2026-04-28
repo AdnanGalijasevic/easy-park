@@ -63,13 +63,12 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenParkingSpotNotFound()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
             var historyService = new Mock<IReservationHistoryService>();
             var rabbitMQService = new Mock<IRabbitMQService>();
-            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object);
+            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object, new Mock<INotificationService>().Object);
 
             var startTime = DateTime.UtcNow.AddHours(1);
             var endTime = startTime.AddHours(1);
@@ -81,7 +80,6 @@ namespace EasyPark.Tests.Services
             };
             var entity = new EasyPark.Services.Database.Reservation();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Equal("Parking spot not found", exception.Message);
         }
@@ -95,7 +93,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var now = DateTime.UtcNow.AddHours(2);
             var request = new ReservationInsertRequest
@@ -118,7 +116,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var request = new ReservationInsertRequest
             {
@@ -134,13 +132,12 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldCalculatePriceAndSetStatus()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
             var historyService = new Mock<IReservationHistoryService>();
             var rabbitMQService = new Mock<IRabbitMQService>();
-            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object);
+            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User { Id = 1, Username = "testuser", Email = "t@e.com", FirstName = "F", LastName = "L", PasswordHash = "h", PasswordSalt = "s", BirthDate = new DateOnly(1990, 1, 1), Coins = 100m };
             context.Users.Add(user);
@@ -163,12 +160,10 @@ namespace EasyPark.Tests.Services
             };
             var entity = new EasyPark.Services.Database.Reservation();
 
-            // Act
             service.BeforeInsert(request, entity);
 
-            // Assert
             Assert.Equal("Pending", entity.Status);
-            Assert.Equal(20.0m, entity.TotalPrice); // 2 hours * 10.0m
+            Assert.Equal(20.0m, entity.TotalPrice);
             Assert.Equal(1, entity.UserId);
             Assert.NotNull(entity.QRCode);
         }
@@ -179,7 +174,7 @@ namespace EasyPark.Tests.Services
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
-            var service = new ReservationService(context, mapper, httpContextAccessor, new Mock<IReservationHistoryService>().Object, new Mock<IRabbitMQService>().Object);
+            var service = new ReservationService(context, mapper, httpContextAccessor, new Mock<IReservationHistoryService>().Object, new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User { Id = 1, Username = "u", Email = "u@e.com", FirstName = "F", LastName = "L", PasswordHash = "h", PasswordSalt = "s", BirthDate = new DateOnly(1990, 1, 1), Coins = 100m };
             var location = new EasyPark.Services.Database.ParkingLocation { Id = 1, Name = "L", Address = "A", CityId = 1, PricePerHour = 5m, PriceRegular = 5m, CreatedBy = 1, CreatedByUser = user };
@@ -210,7 +205,7 @@ namespace EasyPark.Tests.Services
                 mapper,
                 noClaimsAccessor.Object,
                 historyService.Object,
-                rabbitMQService.Object);
+                rabbitMQService.Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User
             {
@@ -272,7 +267,7 @@ namespace EasyPark.Tests.Services
             var httpContextAccessor = TestClaimsHelper.CreateAccessor(userId: 1);
             var historyService = new Mock<IReservationHistoryService>();
             var rabbitMQService = new Mock<IRabbitMQService>();
-            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object);
+            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User
             {
@@ -335,7 +330,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var now = DateTime.UtcNow.AddHours(1);
             var request = new ReservationInsertRequest
@@ -359,7 +354,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var now = DateTime.UtcNow.AddHours(1);
             var request = new ReservationInsertRequest
@@ -378,7 +373,7 @@ namespace EasyPark.Tests.Services
         {
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
-            var service = new ReservationService(context, mapper, TestClaimsHelper.CreateAccessor(), new Mock<IReservationHistoryService>().Object, new Mock<IRabbitMQService>().Object);
+            var service = new ReservationService(context, mapper, TestClaimsHelper.CreateAccessor(), new Mock<IReservationHistoryService>().Object, new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User { Id = 1, Username = "u", Email = "u@e.com", FirstName = "F", LastName = "L", PasswordHash = "h", PasswordSalt = "s", BirthDate = new DateOnly(1990, 1, 1), Coins = 100m };
             var location = new EasyPark.Services.Database.ParkingLocation { Id = 1, Name = "L", Address = "A", CityId = 1, PricePerHour = 5m, PriceRegular = 5m, CreatedBy = 1, CreatedByUser = user };
@@ -404,7 +399,7 @@ namespace EasyPark.Tests.Services
         {
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
-            var service = new ReservationService(context, mapper, TestClaimsHelper.CreateAccessor(userId: 1), new Mock<IReservationHistoryService>().Object, new Mock<IRabbitMQService>().Object);
+            var service = new ReservationService(context, mapper, TestClaimsHelper.CreateAccessor(userId: 1), new Mock<IReservationHistoryService>().Object, new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User { Id = 1, Username = "u", Email = "u@e.com", FirstName = "F", LastName = "L", PasswordHash = "h", PasswordSalt = "s", BirthDate = new DateOnly(1990, 1, 1), Coins = 200m };
             var location = new EasyPark.Services.Database.ParkingLocation { Id = 1, Name = "L", Address = "A", CityId = 1, PricePerHour = 5m, PriceRegular = 5m, CreatedBy = 1, CreatedByUser = user };
@@ -460,7 +455,7 @@ namespace EasyPark.Tests.Services
             var httpContextAccessor = TestClaimsHelper.CreateAccessor(userId: 1);
             var historyService = new Mock<IReservationHistoryService>();
             var rabbitMQService = new Mock<IRabbitMQService>();
-            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object);
+            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User
             {
@@ -527,6 +522,137 @@ namespace EasyPark.Tests.Services
         }
 
         [Fact]
+        public void BeforeInsert_ShouldThrow_WhenOutsideOperatingHours()
+        {
+            var context = GetInMemoryContext();
+            var mapper = GetMockMapper();
+            var service = new ReservationService(
+                context,
+                mapper,
+                TestClaimsHelper.CreateAccessor(userId: 1),
+                new Mock<IReservationHistoryService>().Object,
+                new Mock<IRabbitMQService>().Object,
+                new Mock<INotificationService>().Object);
+
+            var user = new EasyPark.Services.Database.User
+            {
+                Id = 1,
+                Username = "u",
+                Email = "u@e.com",
+                FirstName = "F",
+                LastName = "L",
+                PasswordHash = "h",
+                PasswordSalt = "s",
+                BirthDate = new DateOnly(1990, 1, 1),
+                Coins = 200m
+            };
+            var location = new EasyPark.Services.Database.ParkingLocation
+            {
+                Id = 1,
+                Name = "L",
+                Address = "A",
+                CityId = 1,
+                PricePerHour = 5m,
+                PriceRegular = 5m,
+                CreatedBy = 1,
+                CreatedByUser = user,
+                Is24Hours = false,
+                OperatingHours = "08:00-22:00"
+            };
+            var spot = new EasyPark.Services.Database.ParkingSpot
+            {
+                Id = 1,
+                SpotNumber = "R1",
+                SpotType = "Regular",
+                ParkingLocationId = 1,
+                IsActive = true,
+                ParkingLocation = location
+            };
+            context.Users.Add(user);
+            context.ParkingLocations.Add(location);
+            context.ParkingSpots.Add(spot);
+            context.SaveChanges();
+
+            var localStart = DateTime.Now.Date.AddDays(1).AddHours(23);
+            var request = new ReservationInsertRequest
+            {
+                ParkingSpotId = 1,
+                StartTime = localStart.ToUniversalTime(),
+                EndTime = localStart.AddHours(1).ToUniversalTime()
+            };
+
+            var ex = Assert.Throws<UserException>(() => service.BeforeInsert(request, new EasyPark.Services.Database.Reservation()));
+            Assert.Contains("within operating hours", ex.Message);
+        }
+
+        [Fact]
+        public void BeforeInsert_ShouldAllow_WhenInsideOperatingHours()
+        {
+            var context = GetInMemoryContext();
+            var mapper = GetMockMapper();
+            var service = new ReservationService(
+                context,
+                mapper,
+                TestClaimsHelper.CreateAccessor(userId: 1),
+                new Mock<IReservationHistoryService>().Object,
+                new Mock<IRabbitMQService>().Object,
+                new Mock<INotificationService>().Object);
+
+            var user = new EasyPark.Services.Database.User
+            {
+                Id = 1,
+                Username = "u",
+                Email = "u@e.com",
+                FirstName = "F",
+                LastName = "L",
+                PasswordHash = "h",
+                PasswordSalt = "s",
+                BirthDate = new DateOnly(1990, 1, 1),
+                Coins = 200m
+            };
+            var location = new EasyPark.Services.Database.ParkingLocation
+            {
+                Id = 1,
+                Name = "L",
+                Address = "A",
+                CityId = 1,
+                PricePerHour = 5m,
+                PriceRegular = 5m,
+                CreatedBy = 1,
+                CreatedByUser = user,
+                Is24Hours = false,
+                OperatingHours = "08:00-22:00"
+            };
+            var spot = new EasyPark.Services.Database.ParkingSpot
+            {
+                Id = 1,
+                SpotNumber = "R1",
+                SpotType = "Regular",
+                ParkingLocationId = 1,
+                IsActive = true,
+                ParkingLocation = location
+            };
+            context.Users.Add(user);
+            context.ParkingLocations.Add(location);
+            context.ParkingSpots.Add(spot);
+            context.SaveChanges();
+
+            var localStart = DateTime.Now.Date.AddDays(1).AddHours(10);
+            var request = new ReservationInsertRequest
+            {
+                ParkingSpotId = 1,
+                StartTime = localStart.ToUniversalTime(),
+                EndTime = localStart.AddHours(2).ToUniversalTime()
+            };
+            var entity = new EasyPark.Services.Database.Reservation();
+
+            service.BeforeInsert(request, entity);
+
+            Assert.Equal("Pending", entity.Status);
+            Assert.Equal(1, entity.ParkingSpotId);
+        }
+
+        [Fact]
         public void BeforeInsert_ShouldThrow_WhenAllSpotsOfTypeAreReserved()
         {
             var context = GetInMemoryContext();
@@ -534,7 +660,7 @@ namespace EasyPark.Tests.Services
             var httpContextAccessor = TestClaimsHelper.CreateAccessor(userId: 1);
             var historyService = new Mock<IReservationHistoryService>();
             var rabbitMQService = new Mock<IRabbitMQService>();
-            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object);
+            var service = new ReservationService(context, mapper, httpContextAccessor, historyService.Object, rabbitMQService.Object, new Mock<INotificationService>().Object);
 
             var user = new EasyPark.Services.Database.User
             {
@@ -631,7 +757,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(userId: 1),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var entity = new EasyPark.Services.Database.Reservation
             {
@@ -657,7 +783,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(userId: 1),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var entity = new EasyPark.Services.Database.Reservation
             {
@@ -682,7 +808,7 @@ namespace EasyPark.Tests.Services
                 GetMockMapper(),
                 TestClaimsHelper.CreateAccessor(userId: 1),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var now = DateTime.UtcNow;
             var entity = new EasyPark.Services.Database.Reservation
@@ -727,7 +853,7 @@ namespace EasyPark.Tests.Services
                 mapper,
                 TestClaimsHelper.CreateAccessor(userId: 1),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var owner = new EasyPark.Services.Database.User
             {
@@ -771,7 +897,7 @@ namespace EasyPark.Tests.Services
                 mapper,
                 CreateAdminAccessor(userId: 999),
                 new Mock<IReservationHistoryService>().Object,
-                new Mock<IRabbitMQService>().Object);
+                new Mock<IRabbitMQService>().Object, new Mock<INotificationService>().Object);
 
             var owner = new EasyPark.Services.Database.User
             {
@@ -807,3 +933,5 @@ namespace EasyPark.Tests.Services
         }
     }
 }
+
+

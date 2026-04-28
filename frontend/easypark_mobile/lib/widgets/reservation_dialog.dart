@@ -6,6 +6,7 @@ import 'package:easypark_mobile/models/spot_type_availability.dart';
 import 'package:easypark_mobile/providers/reservation_provider.dart';
 import 'package:easypark_mobile/providers/review_provider.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
 
 /// Tabbed dialog with "Reserve" and "Reviews" tabs for a parking location.
 class ReservationDialog extends StatefulWidget {
@@ -52,7 +53,6 @@ class _ReservationDialogState extends State<ReservationDialog>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Brand header
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
                 decoration: const BoxDecoration(
@@ -117,8 +117,6 @@ class _ReservationDialogState extends State<ReservationDialog>
   }
 }
 
-// ─────────────────────────── Reserve Tab ────────────────────────────────────
-
 class _ReserveTab extends StatefulWidget {
   final ParkingLocation location;
   const _ReserveTab({required this.location});
@@ -147,13 +145,14 @@ class _ReserveTabState extends State<_ReserveTab> {
   bool _loadingAvailability = false;
   List<SpotTypeAvailability> _availability = [];
   String? _availError;
+  String _cleanError(Object error) =>
+      error.toString().replaceFirst('Exception: ', '').trim();
 
   @override
   void initState() {
     super.initState();
     _startTime = _roundUp(DateTime.now());
     _endTime = _startTime.add(const Duration(hours: 1));
-    // Load availability for today + tomorrow immediately
     _loadAvailability();
   }
 
@@ -181,7 +180,11 @@ class _ReserveTabState extends State<_ReserveTab> {
       );
       if (mounted) setState(() => _availability = result);
     } catch (e) {
-      if (mounted) setState(() => _availError = 'Could not load availability');
+      if (mounted) {
+        setState(
+          () => _availError = 'Could not load availability. ${_cleanError(e)}',
+        );
+      }
     } finally {
       if (mounted) setState(() => _loadingAvailability = false);
     }
@@ -214,12 +217,56 @@ class _ReserveTabState extends State<_ReserveTab> {
     }
   }
 
+  String? _operatingHoursBlockReason() {
+    if (widget.location.is24Hours) return null;
+    final operating = widget.location.operatingHours?.trim();
+    if (operating == null || operating.isEmpty) return null;
+
+    final parts = operating.split('-');
+    if (parts.length != 2) return null;
+
+    TimeOfDay? parse(String raw) {
+      final chunks = raw.trim().split(':');
+      if (chunks.length != 2) return null;
+      final h = int.tryParse(chunks[0]);
+      final m = int.tryParse(chunks[1]);
+      if (h == null || m == null) return null;
+      if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+      return TimeOfDay(hour: h, minute: m);
+    }
+
+    final open = parse(parts[0]);
+    final close = parse(parts[1]);
+    if (open == null || close == null) return null;
+
+    int asMinutes(DateTime dt) => dt.hour * 60 + dt.minute;
+    int todMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
+
+    final start = asMinutes(_startTime);
+    final end = asMinutes(_endTime);
+    final openM = todMinutes(open);
+    final closeM = todMinutes(close);
+
+    bool within(int value) {
+      if (openM == closeM) return true;
+      if (openM < closeM) {
+        return value >= openM && value <= closeM;
+      }
+      return value >= openM || value <= closeM;
+    }
+
+    if (!within(start) || !within(end)) {
+      return 'Selected window must be within operating hours ($operating).';
+    }
+
+    return null;
+  }
+
   /// True if the selected type has at least 1 free spot for the chosen window.
   bool get _canReserveNow {
     if (_selectedType == null) return false;
     final avail = _availForType(_selectedType!);
     if (avail == null) return true; // no info yet — let backend decide
-    // Check that the chosen window doesn't overlap a fully-busy slot
     return !avail.busySlots.any(
       (s) => s.start.isBefore(_endTime) && s.end.isAfter(_startTime),
     );
@@ -285,6 +332,15 @@ class _ReserveTabState extends State<_ReserveTab> {
     final hours = durationMins / 60.0;
     final pricePerHour = _priceForType(_selectedType);
     final totalCost = pricePerHour * hours;
+    final operatingHoursBlockReason = _operatingHoursBlockReason();
+    final reserveDisabledReason = reservationProvider.isBooking
+        ? 'Reservation is being created...'
+        : _selectedType == null
+        ? 'Choose a spot type to continue.'
+        : operatingHoursBlockReason ??
+              (!_canReserveNow
+                  ? 'Selected time overlaps with fully booked periods. Pick a different window.'
+                  : null);
 
     return Column(
       children: [
@@ -300,7 +356,6 @@ class _ReserveTabState extends State<_ReserveTab> {
                 ),
                 const SizedBox(height: 20),
 
-                // ── Spot type selector ──────────────────────────────────────
                 const Text(
                   'Select Spot Type',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -326,8 +381,10 @@ class _ReserveTabState extends State<_ReserveTab> {
                     final isSelected = _selectedType == meta.type;
                     final hasSpots = total > 0;
                     final price = _priceForType(meta.type);
+                    final unavailableReason = hasSpots
+                        ? null
+                        : 'No active ${meta.type.toLowerCase()} spots are currently available at this location.';
 
-                    // How many busy slots in the chosen window?
                     final busyInWindow =
                         avail?.busySlots
                             .where(
@@ -345,6 +402,7 @@ class _ReserveTabState extends State<_ReserveTab> {
                       price: price,
                       busyInWindow: busyInWindow,
                       isSelected: isSelected,
+                      unavailableReason: unavailableReason,
                       onTap: hasSpots
                           ? () => setState(() => _selectedType = meta.type)
                           : null,
@@ -352,7 +410,6 @@ class _ReserveTabState extends State<_ReserveTab> {
                   }).toList(),
                 ),
 
-                // ── Availability timeline for selected type ─────────────────
                 if (_selectedType != null) ...[
                   const SizedBox(height: 16),
                   _AvailabilitySection(
@@ -367,7 +424,6 @@ class _ReserveTabState extends State<_ReserveTab> {
 
                 const SizedBox(height: 16),
 
-                // ── Time picker ─────────────────────────────────────────────
                 const Text(
                   'Time (Max 24h, 30m steps)',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -395,7 +451,6 @@ class _ReserveTabState extends State<_ReserveTab> {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Total cost ──────────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -443,70 +498,78 @@ class _ReserveTabState extends State<_ReserveTab> {
           ),
         ),
 
-        // ── Reserve button ────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.all(16),
           child: SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              onPressed:
-                  _selectedType == null ||
-                      reservationProvider.isBooking ||
-                      !_canReserveNow
-                  ? null
-                  : () async {
-                      final result = await reservationProvider
-                          .createReservation(
-                            parkingLocationId: widget.location.id,
-                            spotType: _selectedType!,
-                            startTime: _startTime,
-                            endTime: _endTime,
-                          );
-                      if (!context.mounted) return;
-                      if (result != null) {
-                        Navigator.pop(context, result);
-                      } else if (reservationProvider.bookingError != null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton(
+                  onPressed: reserveDisabledReason != null
+                      ? null
+                      : () async {
+                          final result = await reservationProvider
+                              .createReservation(
+                                parkingLocationId: widget.location.id,
+                                spotType: _selectedType!,
+                                startTime: _startTime,
+                                endTime: _endTime,
+                              );
+                          if (!context.mounted) return;
+                          if (result != null) {
+                            Navigator.pop(context, result);
+                          } else if (reservationProvider.bookingError != null) {
+                            AppFeedback.error(
                               reservationProvider.bookingError!.replaceFirst(
                                 'Exception: ',
                                 '',
                               ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: _canReserveNow && _selectedType != null
+                        ? EasyParkColors.accent
+                        : EasyParkColors.disabled,
+                  ),
+                  child: reservationProvider.isBooking
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              EasyParkColors.onAccent,
                             ),
-                            backgroundColor: EasyParkColors.error,
                           ),
-                        );
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: _canReserveNow && _selectedType != null
-                    ? EasyParkColors.accent
-                    : EasyParkColors.disabled,
-              ),
-              child: reservationProvider.isBooking
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          EasyParkColors.onAccent,
+                        )
+                      : Text(
+                          _selectedType == null
+                              ? 'Select a Spot Type'
+                              : !_canReserveNow
+                              ? 'No spots available at this time'
+                              : 'Reserve $_selectedType Spot',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: EasyParkColors.onAccent,
+                          ),
                         ),
-                      ),
-                    )
-                  : Text(
-                      _selectedType == null
-                          ? 'Select a Spot Type'
-                          : !_canReserveNow
-                          ? 'No spots available at this time'
-                          : 'Reserve $_selectedType Spot',
+                ),
+                if (reserveDisabledReason != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      reserveDisabledReason,
                       style: const TextStyle(
-                        fontSize: 15,
-                        color: EasyParkColors.onAccent,
+                        fontSize: 12,
+                        color: EasyParkColors.textSecondary,
                       ),
+                      textAlign: TextAlign.center,
                     ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -514,8 +577,6 @@ class _ReserveTabState extends State<_ReserveTab> {
     );
   }
 }
-
-// ─────────────────── Availability Section ────────────────────────────────────
 
 class _AvailabilitySection extends StatelessWidget {
   final SpotTypeAvailability? availability;
@@ -549,7 +610,6 @@ class _AvailabilitySection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: const BoxDecoration(
@@ -564,7 +624,7 @@ class _AvailabilitySection extends StatelessWidget {
                     const Icon(
                       Icons.calendar_today,
                       size: 14,
-                      color: EasyParkColors.muted,
+                      color: Colors.black,
                     ),
                     const SizedBox(width: 6),
                     const Text(
@@ -647,7 +707,6 @@ class _AvailabilitySection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Legend
                   Row(
                     children: [
                       const _LegendDot(
@@ -662,7 +721,6 @@ class _AvailabilitySection extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Your selected window highlight
                   _SelectedWindowInfo(
                     startTime: startTime,
                     endTime: endTime,
@@ -671,7 +729,6 @@ class _AvailabilitySection extends StatelessWidget {
                     fmtDate: _fmtDate,
                   ),
                   const SizedBox(height: 10),
-                  // Busy slots list
                   Text(
                     'Fully booked periods:',
                     style: const TextStyle(
@@ -836,8 +893,6 @@ class _LegendDot extends StatelessWidget {
   }
 }
 
-// ─────────────── Spot Type Button ────────────────────────────────────────────
-
 class _SpotTypeButton extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -845,6 +900,7 @@ class _SpotTypeButton extends StatelessWidget {
   final double price;
   final int busyInWindow;
   final bool isSelected;
+  final String? unavailableReason;
   final VoidCallback? onTap;
 
   const _SpotTypeButton({
@@ -854,6 +910,7 @@ class _SpotTypeButton extends StatelessWidget {
     required this.price,
     required this.busyInWindow,
     required this.isSelected,
+    this.unavailableReason,
     this.onTap,
   });
 
@@ -874,90 +931,93 @@ class _SpotTypeButton extends StatelessWidget {
         ? EasyParkColors.accent
         : EasyParkColors.borderLight;
 
-    return GestureDetector(
-      onTap: isDisabled ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: EasyParkColors.accent.withValues(alpha: 0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: fgColor, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Tooltip(
+      message: isDisabled
+          ? (unavailableReason ?? 'This spot type is currently unavailable.')
+          : 'Tap to select $label spot type.',
+      child: GestureDetector(
+        onTap: isDisabled ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: EasyParkColors.accent.withValues(alpha: 0.25),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: fgColor, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: fgColor,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      isDisabled ? 'None' : '$total spots',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDisabled
+                            ? EasyParkColors.disabled
+                            : isSelected
+                            ? EasyParkColors.onAccentMuted
+                            : EasyParkColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: fgColor,
-                      fontSize: 13,
-                    ),
-                  ),
-                  Text(
-                    isDisabled ? 'None' : '$total spots',
+                    '${price.toStringAsFixed(0)}c/h',
                     style: TextStyle(
                       fontSize: 11,
-                      color: isDisabled
-                          ? EasyParkColors.disabled
-                          : isSelected
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
                           ? EasyParkColors.onAccentMuted
                           : EasyParkColors.textSecondary,
                     ),
                   ),
+                  if (!isDisabled && busyInWindow > 0)
+                    Text(
+                      'busy',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isSelected
+                            ? EasyParkColors.highlightBorder
+                            : EasyParkColors.accent,
+                      ),
+                    ),
                 ],
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${price.toStringAsFixed(0)}c/h',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected
-                        ? EasyParkColors.onAccentMuted
-                        : EasyParkColors.textSecondary,
-                  ),
-                ),
-                if (!isDisabled && busyInWindow > 0)
-                  Text(
-                    'busy',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isSelected
-                          ? EasyParkColors.highlightBorder
-                          : EasyParkColors.accent,
-                    ),
-                  ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-// ──────────────────── Time Box ────────────────────────────────────────────────
 
 class _TimeBox extends StatelessWidget {
   final String label;
@@ -987,8 +1047,6 @@ class _TimeBox extends StatelessWidget {
   }
 }
 
-// ─────────────────────────── Reviews Tab ─────────────────────────────────────
-
 class _ReviewsTab extends StatefulWidget {
   final ParkingLocation location;
   const _ReviewsTab({required this.location});
@@ -1000,6 +1058,8 @@ class _ReviewsTab extends StatefulWidget {
 class _ReviewsTabState extends State<_ReviewsTab> {
   int _rating = 0;
   final _commentController = TextEditingController();
+  String _cleanError(Object error) =>
+      error.toString().replaceFirst('Exception: ', '').trim();
 
   @override
   void dispose() {
@@ -1096,26 +1156,11 @@ class _ReviewsTabState extends State<_ReviewsTab> {
                                   _commentController.clear();
                                 });
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Review submitted!'),
-                                      backgroundColor: EasyParkColors.success,
-                                    ),
-                                  );
+                                  AppFeedback.success('Review submitted!');
                                 }
                               } catch (e) {
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        e.toString().replaceFirst(
-                                          'Exception: ',
-                                          '',
-                                        ),
-                                      ),
-                                      backgroundColor: EasyParkColors.error,
-                                    ),
-                                  );
+                                  AppFeedback.error(_cleanError(e));
                                 }
                               }
                             },

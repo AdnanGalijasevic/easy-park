@@ -38,17 +38,9 @@ String? maxLength(String? value, int max, [String? message]) {
 
 String? password(String? value, [String? message]) {
   if (value == null || value.isEmpty) return null;
-  // Relaxed validation to allow default 'test' password
   return value.length >= 4
       ? null
       : (message ?? 'Password must be at least 4 characters long.');
-  /*
-  final regex = RegExp(r'^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$');
-  return regex.hasMatch(value)
-      ? null
-      : (message ??
-            'Password must be at least 8 characters long, contain one uppercase letter, one number, and one symbol.');
-  */
 }
 
 String? email(String? value, [String? message]) {

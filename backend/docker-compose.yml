@@ -1,10 +1,10 @@
 services:
   sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2022-CU13-ubuntu-22.04
     container_name: easypark-sqlserver
     environment:
       - ACCEPT_EULA=Y
-      - SA_PASSWORD=${_saPassword:-QWEasd123!}
+      - SA_PASSWORD=${_saPassword:?_saPassword is required}
       - MSSQL_PID=Developer
     ports:
       - "1433:1433"
@@ -19,8 +19,8 @@ services:
     hostname: "rabbitmq"
     restart: unless-stopped
     environment:
-      - RABBITMQ_DEFAULT_USER=${_rabbitMqUser:-guest}
-      - RABBITMQ_DEFAULT_PASS=${_rabbitMqPassword:-guest}
+      - RABBITMQ_DEFAULT_USER=${_rabbitMqUser:?_rabbitMqUser is required}
+      - RABBITMQ_DEFAULT_PASS=${_rabbitMqPassword:?_rabbitMqPassword is required}
     ports:
       - "15672:15672"
       - "5672:5672"
@@ -41,19 +41,20 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - _connectionString=Server=${_source:-sqlserver},1433;Initial Catalog=${_catalog:-220016};User ID=sa;Password=${_saPassword:-QWEasd123!};TrustServerCertificate=True
+      - _connectionString=${_connectionString:?_connectionString is required}
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - _corsOrigins=${_corsOrigins:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3020,http://127.0.0.1:3020,http://localhost:3021,http://127.0.0.1:3021,http://localhost:4200,http://127.0.0.1:4200,http://localhost:8081,http://127.0.0.1:8081}
-      - _rabbitMqHost=${_rabbitMqHost:-rabbitmq}
-      - _rabbitMqUser=${_rabbitMqUser:-guest}
-      - _rabbitMqPassword=${_rabbitMqPassword:-guest}
-      - _rabbitMqPort=${_rabbitMqPort:-5672}
+      - _corsOrigins=${_corsOrigins:?_corsOrigins is required}
+      - _rabbitMqHost=${_rabbitMqHost:?_rabbitMqHost is required}
+      - _rabbitMqUser=${_rabbitMqUser:?_rabbitMqUser is required}
+      - _rabbitMqPassword=${_rabbitMqPassword:?_rabbitMqPassword is required}
+      - _rabbitMqPort=${_rabbitMqPort:?_rabbitMqPort is required}
       - _stripe=${_stripe:?Stripe secret key is required}
-      - _stripePublishableKey=${_stripePublishableKey:-}
-      - _jwtKey=${_jwtKey:-dev_jwt_key_change_me_please_32_chars_min}
-      - _jwtIssuer=${_jwtIssuer:-easypark-api}
-      - _jwtAudience=${_jwtAudience:-easypark-clients}
+      - _stripePublishableKey=${_stripePublishableKey:?_stripePublishableKey is required}
+      - _stripePublishable=${_stripePublishable:?_stripePublishable is required}
+      - _jwtKey=${_jwtKey:?_jwtKey is required}
+      - _jwtIssuer=${_jwtIssuer:?_jwtIssuer is required}
+      - _jwtAudience=${_jwtAudience:?_jwtAudience is required}
     ports:
       - "8080:8080"
     networks:
@@ -68,21 +69,23 @@ services:
       context: .
       dockerfile: EasyPark.Subscriber/Dockerfile
     environment:
-      - _rabbitMqHost=${_rabbitMqHost:-rabbitmq}
-      - _rabbitMqUser=${_rabbitMqUser:-guest}
-      - _rabbitMqPassword=${_rabbitMqPassword:-guest}
-      - _rabbitMqPort=${_rabbitMqPort:-5672}
-      - _fromAddress=${_fromAddress:-}
-      - _password=${_password:-}
-      - _host=${_host:-smtp.gmail.com}
-      - _enableSSL=${_enableSSL:-true}
-      - _displayName=${_displayName:-EasyPark}
-      - _timeout=${_timeout:-255}
-      - _port=${_port:-465}
+      - _connectionString=${_connectionString:?_connectionString is required}
+      - _rabbitMqHost=${_rabbitMqHost:?_rabbitMqHost is required}
+      - _rabbitMqUser=${_rabbitMqUser:?_rabbitMqUser is required}
+      - _rabbitMqPassword=${_rabbitMqPassword:?_rabbitMqPassword is required}
+      - _rabbitMqPort=${_rabbitMqPort:?_rabbitMqPort is required}
+      - _fromAddress=${_fromAddress:?_fromAddress is required}
+      - _password=${_password:?_password is required}
+      - _host=${_host:?_host is required}
+      - _enableSSL=${_enableSSL:?_enableSSL is required}
+      - _displayName=${_displayName:?_displayName is required}
+      - _timeout=${_timeout:?_timeout is required}
+      - _port=${_port:?_port is required}
     networks:
       - easypark-network
     depends_on:
       - rabbitmq
+      - sqlserver
 
 volumes:
   sqlserver_data:

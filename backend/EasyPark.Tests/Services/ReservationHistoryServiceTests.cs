@@ -34,13 +34,11 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void LogStatusChange_ShouldThrowException_WhenReservationNotFound()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
             var service = new ReservationHistoryService(context, mapper, httpContextAccessor);
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.LogStatusChange(999, "Pending", "Active"));
             Assert.Equal("Reservation not found", exception.Message);
         }
@@ -48,7 +46,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void LogStatusChange_ShouldCreateHistoryEntry()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
@@ -57,6 +54,7 @@ namespace EasyPark.Tests.Services
             var user = new EasyPark.Services.Database.User { Id = 1, Username = "testuser", Email = "t@e.com", FirstName = "F", LastName = "L", PasswordHash = "h", PasswordSalt = "s", BirthDate = new DateOnly(1990, 1, 1) };
             context.Users.Add(user);
 
+            // DB stores UTC in production; DateTime.Now is test-only fixture value.
             var reservation = new EasyPark.Services.Database.Reservation
             {
                 Id = 1,
@@ -69,10 +67,9 @@ namespace EasyPark.Tests.Services
             context.Reservations.Add(reservation);
             context.SaveChanges();
 
-            // Act
             service.LogStatusChange(1, "Pending", "Active", "Customer checked in", "Notes here");
+            context.SaveChanges();
 
-            // Assert
             var history = context.ReservationHistories.FirstOrDefault(h => h.ReservationId == 1);
             Assert.NotNull(history);
             Assert.Equal("Pending", history.OldStatus);

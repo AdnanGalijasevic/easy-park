@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 class MapPicker extends StatefulWidget {
   final double initialLatitude;
@@ -19,6 +20,7 @@ class MapPicker extends StatefulWidget {
 
 class _MapPickerState extends State<MapPicker> {
   late LatLng _selectedLocation;
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
@@ -26,7 +28,17 @@ class _MapPickerState extends State<MapPicker> {
     _selectedLocation = LatLng(widget.initialLatitude, widget.initialLongitude);
   }
 
-  void _onMapTap(LatLng location) {
+  @override
+  void didUpdateWidget(MapPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialLatitude != widget.initialLatitude ||
+        oldWidget.initialLongitude != widget.initialLongitude) {
+      _selectedLocation = LatLng(widget.initialLatitude, widget.initialLongitude);
+      _mapController.move(_selectedLocation, 15.0);
+    }
+  }
+
+  void _onMapTap(TapPosition tapPosition, LatLng location) {
     setState(() {
       _selectedLocation = location;
     });
@@ -37,29 +49,33 @@ class _MapPickerState extends State<MapPicker> {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 400,
-      child: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: _selectedLocation,
-          zoom: 15,
+      child: FlutterMap(
+        mapController: _mapController,
+        options: MapOptions(
+          initialCenter: _selectedLocation,
+          initialZoom: 15.0,
+          onTap: _onMapTap,
         ),
-        onMapCreated: (_) {},
-        onTap: _onMapTap,
-        markers: {
-          Marker(
-            markerId: const MarkerId('selected_location'),
-            position: _selectedLocation,
-            draggable: true,
-            onDragEnd: (LatLng newPosition) {
-              setState(() {
-                _selectedLocation = newPosition;
-              });
-              widget.onLocationSelected(
-                newPosition.latitude,
-                newPosition.longitude,
-              );
-            },
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.easypark.desktop',
           ),
-        },
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _selectedLocation,
+                width: 40,
+                height: 40,
+                child: const Icon(
+                  Icons.location_pin,
+                  color: Colors.red,
+                  size: 40,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

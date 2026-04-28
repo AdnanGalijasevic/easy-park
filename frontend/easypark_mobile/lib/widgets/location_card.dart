@@ -9,8 +9,11 @@ import 'package:easypark_mobile/providers/parking_location_provider.dart';
 import 'package:easypark_mobile/providers/reservation_provider.dart';
 import 'package:easypark_mobile/widgets/reservation_dialog.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
 
 class LocationCard extends StatelessWidget {
+  static const String _cancellationUnavailableMessage =
+      'Cancellation is no longer available for this reservation.';
   final ParkingLocation location;
 
   /// Called on first tap — should focus/zoom the map to this location.
@@ -26,6 +29,9 @@ class LocationCard extends StatelessWidget {
     this.isOptimalRecommendation = false,
   });
 
+  String _cleanError(Object error) =>
+      error.toString().replaceFirst('Exception: ', '').trim();
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ParkingLocationProvider>(context);
@@ -35,157 +41,221 @@ class LocationCard extends StatelessWidget {
     if (isSelected) {
       borderSide = const BorderSide(color: EasyParkColors.info, width: 2);
     } else if (isOptimalRecommendation) {
-      borderSide = const BorderSide(color: EasyParkColors.highlightBorder, width: 3);
+      borderSide = const BorderSide(
+        color: EasyParkColors.highlightBorder,
+        width: 3,
+      );
     } else {
       borderSide = BorderSide.none;
     }
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: isSelected ? 4 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: borderSide,
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          if (!isSelected) {
-            // First tap: select the location and focus the map
-            provider.selectLocation(location);
-            onFirstTap?.call(location);
-          } else {
-            // Second tap (already selected): open reservation dialog
-            _showReservationDialog(context);
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      location.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            elevation: isSelected ? 4 : 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: borderSide,
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                if (!isSelected) {
+                  provider.selectLocation(location);
+                  onFirstTap?.call(location);
+                } else {
+                  _showReservationDialog(context);
+                }
+              },
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  isOptimalRecommendation ? 26 : 16,
+                  16,
+                  16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            location.name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          const Padding(
+                            padding: EdgeInsets.only(right: 6),
+                            child: Icon(
+                              Icons.touch_app,
+                              color: EasyParkColors.info,
+                              size: 18,
+                            ),
+                          ),
+                        _buildAvailabilityBadge(),
+                      ],
                     ),
-                  ),
-                  // Tap hint icon when selected
-                  if (isSelected)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Icon(
-                        Icons.touch_app,
-                        color: EasyParkColors.info,
-                        size: 18,
-                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          size: 16,
+                          color: EasyParkColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            location.address,
+                            style: const TextStyle(
+                              color: EasyParkColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  _buildAvailabilityBadge(),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 16, color: EasyParkColors.textSecondary),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      location.address,
-                      style: const TextStyle(color: EasyParkColors.textSecondary),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.star,
+                          color: EasyParkColors.highlightBorder,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${location.averageRating.toStringAsFixed(1)} (${location.totalReviews})',
+                          style: const TextStyle(
+                            color: EasyParkColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.star, color: EasyParkColors.highlightBorder, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${location.averageRating.toStringAsFixed(1)} (${location.totalReviews})',
-                    style: const TextStyle(color: EasyParkColors.textSecondary, fontSize: 13),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.attach_money,
-                        color: EasyParkColors.accent,
-                        size: 20,
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.stars,
+                              color: EasyParkColors.highlightBorder,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${location.priceRegular.toStringAsFixed(2)} Coins/hr',
+                              style: const TextStyle(
+                                color: EasyParkColors.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Consumer<BookmarkProvider>(
+                          builder: (context, bookmarkProvider, _) {
+                            final isBookmarked = bookmarkProvider.isBookmarked(
+                              location.id,
+                            );
+                            return IconButton(
+                              icon: Icon(
+                                isBookmarked
+                                    ? Icons.bookmark
+                                    : Icons.bookmark_border,
+                                color: isBookmarked
+                                    ? EasyParkColors.info
+                                    : EasyParkColors.disabled,
+                              ),
+                              tooltip: isBookmarked
+                                  ? 'Remove bookmark'
+                                  : 'Bookmark this location',
+                              onPressed: () async {
+                                try {
+                                  final wasBookmarked = isBookmarked;
+                                  await bookmarkProvider.toggleBookmark(
+                                    location.id,
+                                  );
+                                  AppFeedback.success(
+                                    wasBookmarked
+                                        ? 'Bookmark removed.'
+                                        : 'Bookmark added.',
+                                  );
+                                } catch (e) {
+                                  AppFeedback.error(_cleanError(e));
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    if (isSelected)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Tap again to reserve',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: EasyParkColors.info,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
                       ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (isOptimalRecommendation)
+            Positioned(
+              top: 0,
+              left: 0,
+              child: Material(
+                elevation: 2,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(8),
+                ),
+                color: EasyParkColors.highlightBorder,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(
+                        Icons.star_rounded,
+                        size: 14,
+                        color: EasyParkColors.onAccent,
+                      ),
+                      SizedBox(width: 4),
                       Text(
-                        '${location.priceRegular} Coins/hr',
-                        style: const TextStyle(
-                          color: EasyParkColors.accent,
-                          fontWeight: FontWeight.w600,
+                        'Best for you',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: EasyParkColors.onAccent,
                         ),
                       ),
                     ],
                   ),
-                  Consumer<BookmarkProvider>(
-                    builder: (context, bookmarkProvider, _) {
-                      final isBookmarked = bookmarkProvider.isBookmarked(
-                        location.id,
-                      );
-                      return IconButton(
-                        icon: Icon(
-                          isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                          color: isBookmarked ? EasyParkColors.info : EasyParkColors.disabled,
-                        ),
-                        tooltip: isBookmarked
-                            ? 'Remove bookmark'
-                            : 'Bookmark this location',
-                        onPressed: () async {
-                          try {
-                            await bookmarkProvider.toggleBookmark(location.id);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    e.toString().replaceFirst(
-                                      'Exception: ',
-                                      '',
-                                    ),
-                                  ),
-                                  backgroundColor: EasyParkColors.error,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ],
-              ),
-              // Tap hint text when selected
-              if (isSelected)
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Tap again to reserve',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: EasyParkColors.info,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
                 ),
-            ],
-          ),
-        ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -201,13 +271,17 @@ class LocationCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: availableSpots > 0 ? EasyParkColors.successContainer : EasyParkColors.errorContainer,
+        color: availableSpots > 0
+            ? EasyParkColors.successContainer
+            : EasyParkColors.errorContainer,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         '$availableSpots/$totalSpots',
         style: TextStyle(
-          color: availableSpots > 0 ? EasyParkColors.successOnContainer : EasyParkColors.errorOnContainer,
+          color: availableSpots > 0
+              ? EasyParkColors.successOnContainer
+              : EasyParkColors.errorOnContainer,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -256,7 +330,11 @@ class LocationCard extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle, color: EasyParkColors.success, size: 64),
+              const Icon(
+                Icons.check_circle,
+                color: EasyParkColors.success,
+                size: 64,
+              ),
               const SizedBox(height: 16),
               const Text(
                 'Reservation Successful!',
@@ -284,11 +362,8 @@ class LocationCard extends StatelessWidget {
                     );
                     if (!await launchUrl(url)) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Could not open map'),
-                            backgroundColor: EasyParkColors.error,
-                          ),
+                        AppFeedback.error(
+                          'Could not open navigation for this location.',
                         );
                       }
                     } else {
@@ -308,32 +383,26 @@ class LocationCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: TextButton.icon(
-                  onPressed: () async {
-                    try {
-                      await Provider.of<ReservationProvider>(
-                        context,
-                        listen: false,
-                      ).cancelReservation(reservation.id);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Reservation Cancelled'),
-                            backgroundColor: EasyParkColors.muted,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: EasyParkColors.error,
-                          ),
-                        );
-                      }
-                    }
-                  },
+                  onPressed: reservation.cancellationAllowed
+                      ? () async {
+                          try {
+                            await Provider.of<ReservationProvider>(
+                              context,
+                              listen: false,
+                            ).cancelReservation(reservation.id);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              AppFeedback.info(
+                                'Reservation cancelled successfully.',
+                              );
+                            }
+                          } catch (e) {
+                            AppFeedback.error(
+                              'Could not cancel reservation. ${_cleanError(e)}',
+                            );
+                          }
+                        }
+                      : null,
                   icon: const Icon(Icons.cancel, color: EasyParkColors.error),
                   label: const Text(
                     'Cancel Reservation',
@@ -341,6 +410,19 @@ class LocationCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (!reservation.cancellationAllowed)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    reservation.cancellationReason ??
+                        _cancellationUnavailableMessage,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: EasyParkColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
             ],
           ),
         ),

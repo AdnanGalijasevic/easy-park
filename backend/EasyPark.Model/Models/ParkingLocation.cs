@@ -27,7 +27,6 @@ namespace EasyPark.Model.Models
         public DateTime? UpdatedAt { get; set; }
         public bool IsActive { get; set; }
 
-        // Attributes for Recommendation System
         public bool HasVideoSurveillance { get; set; }
         public bool HasNightSurveillance { get; set; }
         public bool HasDisabledSpots { get; set; }

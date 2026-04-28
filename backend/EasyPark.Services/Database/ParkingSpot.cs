@@ -13,7 +13,6 @@ namespace EasyPark.Services.Database
         public bool IsOccupied { get; set; } = false;
         public DateTime CreatedAt { get; set; }
 
-        // Navigation properties
         public virtual ParkingLocation ParkingLocation { get; set; } = null!;
         public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
     }

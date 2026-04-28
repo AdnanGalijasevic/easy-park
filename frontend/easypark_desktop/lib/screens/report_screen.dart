@@ -11,6 +11,7 @@ import 'package:easypark_desktop/providers/reservation_provider.dart';
 import 'package:easypark_desktop/providers/auth_provider.dart';
 import 'package:easypark_desktop/providers/base_provider.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -27,7 +28,6 @@ class _ReportScreenState extends State<ReportScreen> {
   double _totalRevenue = 0;
   int _totalReservations = 0;
 
-  /// Month used for the admin monthly PDF export (independent of on-screen period toggle).
   DateTime _pdfMonth = DateTime(DateTime.now().year, DateTime.now().month);
   bool _pdfGraphsOnly = false;
   bool _pdfExporting = false;
@@ -97,7 +97,11 @@ class _ReportScreenState extends State<ReportScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error loading reports: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load reports: ${normalizeErrorMessage(e)}'),
+          ),
+        );
       }
     }
   }
@@ -217,7 +221,11 @@ class _ReportScreenState extends State<ReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF export error: $e')),
+          SnackBar(
+            content: Text(
+              'Failed to export monthly PDF: ${normalizeErrorMessage(e)}',
+            ),
+          ),
         );
       }
     } finally {
@@ -268,7 +276,11 @@ class _ReportScreenState extends State<ReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Stripe PDF export error: $e')),
+          SnackBar(
+            content: Text(
+              'Failed to export Stripe payments PDF: ${normalizeErrorMessage(e)}',
+            ),
+          ),
         );
       }
     } finally {
@@ -398,16 +410,21 @@ class _ReportScreenState extends State<ReportScreen> {
                   backgroundColor: EasyParkColors.surfaceElevated,
                   onSelected: (v) => setState(() => _pdfGraphsOnly = v),
                 ),
-                FilledButton.icon(
-                  onPressed: _pdfExporting ? null : _exportMonthlyPdf,
-                  icon: _pdfExporting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.share, size: 20),
-                  label: Text(_pdfExporting ? 'Preparing…' : 'Export PDF'),
+                Tooltip(
+                  message: _pdfExporting
+                      ? 'Monthly PDF export already in progress.'
+                      : 'Export monthly PDF report',
+                  child: FilledButton.icon(
+                    onPressed: _pdfExporting ? null : _exportMonthlyPdf,
+                    icon: _pdfExporting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.share, size: 20),
+                    label: Text(_pdfExporting ? 'Preparing…' : 'Export PDF'),
+                  ),
                 ),
               ],
             ),
@@ -456,21 +473,31 @@ class _ReportScreenState extends State<ReportScreen> {
                   backgroundColor: EasyParkColors.surfaceElevated,
                   onSelected: (v) => setState(() => _stripePdfAllTime = v),
                 ),
-                OutlinedButton.icon(
-                  onPressed: _stripePdfAllTime ? null : _pickStripePdfMonth,
-                  icon: const Icon(Icons.calendar_month, size: 20),
-                  label: Text(label),
+                Tooltip(
+                  message: _stripePdfAllTime
+                      ? 'Disable "All time" to choose month.'
+                      : 'Choose export month',
+                  child: OutlinedButton.icon(
+                    onPressed: _stripePdfAllTime ? null : _pickStripePdfMonth,
+                    icon: const Icon(Icons.calendar_month, size: 20),
+                    label: Text(label),
+                  ),
                 ),
-                FilledButton.icon(
-                  onPressed: _stripePdfExporting ? null : _exportStripePaymentsPdf,
-                  icon: _stripePdfExporting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.share, size: 20),
-                  label: Text(_stripePdfExporting ? 'Preparing…' : 'Export PDF'),
+                Tooltip(
+                  message: _stripePdfExporting
+                      ? 'Stripe PDF export already in progress.'
+                      : 'Export Stripe payments PDF',
+                  child: FilledButton.icon(
+                    onPressed: _stripePdfExporting ? null : _exportStripePaymentsPdf,
+                    icon: _stripePdfExporting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.share, size: 20),
+                    label: Text(_stripePdfExporting ? 'Preparing…' : 'Export PDF'),
+                  ),
                 ),
               ],
             ),

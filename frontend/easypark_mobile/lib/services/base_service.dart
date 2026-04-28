@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:easypark_mobile/utils/constants.dart';
+import 'package:easypark_mobile/services/auth_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:easypark_mobile/utils/session_events.dart';
+import 'package:easypark_mobile/utils/client_type.dart';
 
 abstract class BaseService<T> {
   final String _endpoint;
@@ -12,21 +15,54 @@ abstract class BaseService<T> {
 
   Future<Map<String, String>> _getHeaders() async {
     String? accessToken = await _storage.read(key: 'accessToken');
+    accessToken ??= AuthService.currentAccessToken;
+    final clientType = resolveClientType();
 
     if (accessToken == null) {
-      return {'Content-Type': 'application/json', 'X-Client-Type': 'mobile'};
+      return {'Content-Type': 'application/json', 'X-Client-Type': clientType};
     }
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $accessToken',
-      'X-Client-Type': 'mobile',
+      'X-Client-Type': clientType,
     };
   }
 
-  // Protected accessor for subclasses
   Future<Map<String, String>> getHeaders() => _getHeaders();
 
   Future<T> fromJson(Map<String, dynamic> json);
+
+  Exception _buildApiException(http.Response response, String fallbackMessage) {
+    if (response.statusCode == 401) {
+      SessionEvents.emitUnauthorized();
+      return Exception('Session expired. Please log in again.');
+    }
+    try {
+      final data = jsonDecode(response.body);
+      if (data is Map<String, dynamic>) {
+        final errors = data['errors'];
+        if (errors is Map<String, dynamic>) {
+          final userErrors = errors['userError'];
+          if (userErrors is List && userErrors.isNotEmpty) {
+            return Exception(userErrors.first.toString());
+          }
+          for (final value in errors.values) {
+            if (value is List && value.isNotEmpty) {
+              return Exception(value.first.toString());
+            }
+            if (value is String && value.trim().isNotEmpty) {
+              return Exception(value.trim());
+            }
+          }
+        }
+        final message = data['message'] ?? data['userError'] ?? data['error'];
+        if (message != null && message.toString().trim().isNotEmpty) {
+          return Exception(message.toString().trim());
+        }
+      }
+    } catch (_) {}
+    return Exception(fallbackMessage);
+  }
 
   Future<List<T>> get({Map<String, dynamic>? search}) async {
     var uri = Uri.parse('${AppConstants.baseUrl}/$_endpoint');
@@ -47,7 +83,6 @@ abstract class BaseService<T> {
       var data = jsonDecode(response.body);
       List<dynamic> list;
 
-      // Handle PagedResult structure { "count": N, "resultList": [...] }
       if (data is Map<String, dynamic> && data.containsKey('resultList')) {
         list = (data['resultList'] as List<dynamic>?) ?? [];
       } else if (data is List) {
@@ -59,9 +94,11 @@ abstract class BaseService<T> {
       return await Future.wait(
         list.map((e) => fromJson(e as Map<String, dynamic>)),
       );
-    } else {
-      throw Exception('Failed to load data: ${response.statusCode}');
     }
+    throw _buildApiException(
+      response,
+      'Failed to load data (${response.statusCode}).',
+    );
   }
 
   Future<T> getById(int id) async {
@@ -71,9 +108,11 @@ abstract class BaseService<T> {
 
     if (response.statusCode == 200) {
       return fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('Failed to load item: ${response.statusCode}');
     }
+    throw _buildApiException(
+      response,
+      'Failed to load item (${response.statusCode}).',
+    );
   }
 
   Future<void> put(int id, Map<String, dynamic> body) async {
@@ -83,7 +122,10 @@ abstract class BaseService<T> {
         await http.put(uri, headers: headers, body: jsonEncode(body));
 
     if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Failed to update item: ${response.statusCode}');
+      throw _buildApiException(
+        response,
+        'Failed to update item (${response.statusCode}).',
+      );
     }
   }
 
@@ -96,13 +138,20 @@ abstract class BaseService<T> {
     if (response.statusCode != 200 &&
         response.statusCode != 201 &&
         response.statusCode != 204) {
-      throw Exception('Failed to create item: ${response.statusCode}');
+      throw _buildApiException(
+        response,
+        'Failed to create item (${response.statusCode}).',
+      );
     }
   }
 
   Future<http.Response> postAction(String action, Map<String, dynamic> body) async {
     final uri = Uri.parse('${AppConstants.baseUrl}/$_endpoint/$action');
     final headers = await _getHeaders();
-    return await http.put(uri, headers: headers, body: jsonEncode(body));
+    final response = await http.put(uri, headers: headers, body: jsonEncode(body));
+    if (response.statusCode == 401) {
+      throw _buildApiException(response, 'Session expired. Please log in again.');
+    }
+    return response;
   }
 }

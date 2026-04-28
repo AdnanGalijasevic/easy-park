@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:easypark_desktop/models/parking_spot_model.dart';
 import 'package:easypark_desktop/models/parking_location_model.dart';
 import 'package:easypark_desktop/providers/parking_location_provider.dart';
+import 'package:easypark_desktop/utils/utils.dart';
 
 class ParkingSpotEditor extends StatefulWidget {
   final ParkingSpot? spot;
@@ -40,18 +41,11 @@ class _ParkingSpotEditorState extends State<ParkingSpotEditor> {
     if (spot != null) {
       _selectedSpotType = spot.spotType;
       _isActive = spot.isActive;
-      // We don't set _selectedLocationId here because if it's an edit,
-      // the parent screen logic usually handles the update call which might not need location ID
-      // if the backend doesn't allow moving spots between locations,
-      // or we extract it from the spot if the model has it.
-      // However, for "Add", we definitely need it.
-      // Based on original code, Edit displayed "Location: Name" text and didn't allow changing it.
     }
   }
 
   Future<void> _loadLocations() async {
     try {
-      // Assuming a large enough page size to get all for the dropdown
       var searchResult = await _locationProvider.get(page: 0, pageSize: 1000);
       if (mounted) {
         setState(() {
@@ -64,7 +58,6 @@ class _ParkingSpotEditorState extends State<ParkingSpotEditor> {
         setState(() {
           _isLoadingLocations = false;
         });
-        // Error handling could be improved, maybe a snackbar or retry
       }
     }
   }
@@ -80,7 +73,9 @@ class _ParkingSpotEditorState extends State<ParkingSpotEditor> {
 
     if (widget.spot == null && _selectedLocationId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a parking location')),
+        const SnackBar(
+          content: Text('Select a parking location before saving the spot.'),
+        ),
       );
       return;
     }
@@ -141,7 +136,8 @@ class _ParkingSpotEditorState extends State<ParkingSpotEditor> {
                             _selectedLocationId = value;
                           });
                         },
-                        validator: (value) => value == null ? 'Required' : null,
+                        validator: (value) =>
+                            value == null ? 'Parking location is required.' : null,
                       ),
                       const SizedBox(height: 12),
                     ] else ...[
@@ -158,7 +154,7 @@ class _ParkingSpotEditorState extends State<ParkingSpotEditor> {
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) =>
-                          value == null || value.isEmpty ? 'Required' : null,
+                          inputRequired(value, 'Spot number is required.'),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(

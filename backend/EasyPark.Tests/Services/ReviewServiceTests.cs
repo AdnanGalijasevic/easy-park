@@ -42,7 +42,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenRatingIsInvalid()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
@@ -51,7 +50,6 @@ namespace EasyPark.Tests.Services
             var request = new ReviewInsertRequest { Rating = 6 };
             var entity = new EasyPark.Services.Database.Review();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Equal("Rating must be between 1 and 5", exception.Message);
         }
@@ -59,7 +57,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenDuplicateReview()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
@@ -78,7 +75,6 @@ namespace EasyPark.Tests.Services
             var request = new ReviewInsertRequest { ParkingLocationId = 1, Rating = 4 };
             var entity = new EasyPark.Services.Database.Review();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Equal("You have already reviewed this parking location", exception.Message);
         }

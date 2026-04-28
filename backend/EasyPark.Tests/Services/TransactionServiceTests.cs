@@ -42,7 +42,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenAmountIsZeroOrNegative()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
@@ -51,7 +50,6 @@ namespace EasyPark.Tests.Services
             var request = new TransactionInsertRequest { Amount = 0, PaymentMethod = "Stripe" };
             var entity = new EasyPark.Services.Database.Transaction();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Equal("Amount must be greater than 0", exception.Message);
         }
@@ -59,7 +57,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenPaymentMethodIsInvalid()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
@@ -68,7 +65,6 @@ namespace EasyPark.Tests.Services
             var request = new TransactionInsertRequest { Amount = 10, PaymentMethod = "Bitcoin" };
             var entity = new EasyPark.Services.Database.Transaction();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Contains("Invalid payment method", exception.Message);
         }
@@ -76,7 +72,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldSetRequiredFields()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var httpContextAccessor = TestClaimsHelper.CreateAccessor();
@@ -89,10 +84,8 @@ namespace EasyPark.Tests.Services
             var request = new TransactionInsertRequest { Amount = 100, PaymentMethod = "Stripe", Currency = "BAM" };
             var entity = new EasyPark.Services.Database.Transaction();
 
-            // Act
             service.BeforeInsert(request, entity);
 
-            // Assert
             Assert.Equal(1, entity.UserId);
             Assert.Equal("Pending", entity.Status);
             Assert.Equal("BAM", entity.Currency);

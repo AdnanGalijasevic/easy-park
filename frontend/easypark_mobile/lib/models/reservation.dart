@@ -35,6 +35,15 @@ class Reservation {
     this.updatedAt,
   });
 
+  /// Backend may send UTC timestamps with or without timezone suffix.
+  /// If suffix missing, treat value as UTC and then convert to local time.
+  static DateTime _parseLocal(String s) {
+    final hasTimezone =
+        s.endsWith('Z') || RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(s);
+    final normalized = hasTimezone ? s : '${s}Z';
+    return DateTime.parse(normalized).toLocal();
+  }
+
   factory Reservation.fromJson(Map<String, dynamic> json) {
     return Reservation(
       id: (json['id'] as num).toInt(),
@@ -43,10 +52,10 @@ class Reservation {
       parkingSpotId: (json['parkingSpotId'] as num).toInt(),
       parkingSpotNumber: json['parkingSpotNumber'] as String? ?? '',
       parkingLocationName: json['parkingLocationName'] as String? ?? '',
-      startTime: DateTime.parse(json['startTime'] as String),
-      endTime: DateTime.parse(json['endTime'] as String),
+      startTime: _parseLocal(json['startTime'] as String),
+      endTime: _parseLocal(json['endTime'] as String),
       actualEndTime: json['actualEndTime'] != null
-          ? DateTime.parse(json['actualEndTime'] as String)
+          ? _parseLocal(json['actualEndTime'] as String)
           : null,
       status: json['status'] as String? ?? 'Unknown',
       totalPrice: (json['totalPrice'] as num?)?.toDouble() ?? 0.0,
@@ -54,10 +63,10 @@ class Reservation {
       cancellationAllowed: json['cancellationAllowed'] as bool? ?? false,
       cancellationReason: json['cancellationReason'] as String?,
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+          ? _parseLocal(json['createdAt'] as String)
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+          ? _parseLocal(json['updatedAt'] as String)
           : null,
     );
   }

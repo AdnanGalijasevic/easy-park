@@ -97,7 +97,6 @@ namespace EasyPark.Services.Services
             };
 
             Context.ReservationHistories.Add(history);
-            Context.SaveChanges();
         }
 
         public override ReservationHistoryModel GetById(int id)

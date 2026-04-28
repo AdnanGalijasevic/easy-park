@@ -15,6 +15,13 @@ class Bookmark {
     required this.createdAt,
   });
 
+  static DateTime _parseLocal(String s) {
+    final hasTimezone =
+        s.endsWith('Z') || RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(s);
+    final normalized = hasTimezone ? s : '${s}Z';
+    return DateTime.parse(normalized).toLocal();
+  }
+
   factory Bookmark.fromJson(Map<String, dynamic> json) {
     return Bookmark(
       id: (json['id'] as num).toInt(),
@@ -23,7 +30,7 @@ class Bookmark {
       parkingLocationId: (json['parkingLocationId'] as num).toInt(),
       parkingLocationName: json['parkingLocationName'] as String? ?? '',
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+          ? _parseLocal(json['createdAt'] as String)
           : DateTime.now(),
     );
   }

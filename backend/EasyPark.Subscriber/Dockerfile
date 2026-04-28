@@ -3,6 +3,7 @@ WORKDIR /app
 
 COPY ["EasyPark.Subscriber/EasyPark.Subscriber.csproj", "EasyPark.Subscriber/"]
 COPY ["EasyPark.Model/EasyPark.Model.csproj", "EasyPark.Model/"]
+COPY ["EasyPark.Services/EasyPark.Services.csproj", "EasyPark.Services/"]
 
 WORKDIR /app/EasyPark.Subscriber
 RUN dotnet restore

@@ -41,7 +41,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenSpotNumberIsRequired()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var service = new ParkingSpotService(context, mapper);
@@ -49,7 +48,6 @@ namespace EasyPark.Tests.Services
             var request = new ParkingSpotInsertRequest { SpotNumber = "", SpotType = "Regular" };
             var entity = new EasyPark.Services.Database.ParkingSpot();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Equal("Spot number is required", exception.Message);
         }
@@ -57,7 +55,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenSpotTypeIsInvalid()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var service = new ParkingSpotService(context, mapper);
@@ -65,7 +62,6 @@ namespace EasyPark.Tests.Services
             var request = new ParkingSpotInsertRequest { SpotNumber = "A1", SpotType = "Helipad" };
             var entity = new EasyPark.Services.Database.ParkingSpot();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Contains("Invalid spot type", exception.Message);
         }
@@ -73,7 +69,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void BeforeInsert_ShouldThrowException_WhenDuplicateSpotInLocation()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var service = new ParkingSpotService(context, mapper);
@@ -88,7 +83,6 @@ namespace EasyPark.Tests.Services
             var request = new ParkingSpotInsertRequest { ParkingLocationId = 1, SpotNumber = "A1", SpotType = "Regular" };
             var entity = new EasyPark.Services.Database.ParkingSpot();
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.BeforeInsert(request, entity));
             Assert.Contains("already exists in this parking location", exception.Message);
         }

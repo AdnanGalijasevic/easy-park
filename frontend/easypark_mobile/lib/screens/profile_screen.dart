@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:easypark_mobile/providers/auth_provider.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
+import 'package:easypark_mobile/utils/input_validators.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -24,6 +26,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _newPasswordConfirmController = TextEditingController();
 
   bool _isLoading = false;
+  bool _didAttemptSubmit = false;
+  String? _profileNotice;
+  bool _profileNoticeIsError = false;
 
   @override
   void initState() {
@@ -41,11 +46,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _usernameController.text = user.username;
       _emailController.text = user.email;
       _phoneController.text = user.phone ?? '';
+      _registerFieldListeners();
     }
   }
 
+  void _registerFieldListeners() {
+    _firstNameController.addListener(_onFormFieldChanged);
+    _lastNameController.addListener(_onFormFieldChanged);
+    _usernameController.addListener(_onFormFieldChanged);
+    _emailController.addListener(_onFormFieldChanged);
+    _phoneController.addListener(_onFormFieldChanged);
+    _currentPasswordController.addListener(_onFormFieldChanged);
+    _newPasswordController.addListener(_onFormFieldChanged);
+    _newPasswordConfirmController.addListener(_onFormFieldChanged);
+  }
+
+  void _onFormFieldChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  bool get _isFirstNameValid =>
+      InputValidators.requiredText(_firstNameController.text, 'First Name') ==
+      null;
+  bool get _isLastNameValid =>
+      InputValidators.requiredText(_lastNameController.text, 'Last Name') ==
+      null;
+  bool get _isUsernameValid =>
+      InputValidators.requiredText(_usernameController.text, 'Username') ==
+          null &&
+      RegExp(r'^[A-Za-z0-9_]+$').hasMatch(_usernameController.text.trim()) &&
+      _usernameController.text.trim().length >= 3 &&
+      _usernameController.text.trim().length <= 20;
+  bool get _isEmailValid => InputValidators.email(_emailController.text) == null;
+  bool get _isPhoneValid =>
+      InputValidators.phoneOptional(_phoneController.text) == null;
+  bool get _isPasswordSectionValid {
+    final hasPasswordIntent = _newPasswordController.text.trim().isNotEmpty ||
+        _newPasswordConfirmController.text.trim().isNotEmpty ||
+        _currentPasswordController.text.trim().isNotEmpty;
+    if (!hasPasswordIntent) return true;
+
+    final currentPasswordValid =
+        _currentPasswordController.text.trim().isNotEmpty;
+    final newPasswordValid =
+        InputValidators.passwordStrong(_newPasswordController.text) == null;
+    final confirmPasswordValid = _newPasswordConfirmController.text ==
+        _newPasswordController.text;
+
+    return currentPasswordValid && newPasswordValid && confirmPasswordValid;
+  }
+
+  bool get _canSaveProfile =>
+      !_isLoading &&
+      _isFirstNameValid &&
+      _isLastNameValid &&
+      _isUsernameValid &&
+      _isEmailValid &&
+      _isPhoneValid &&
+      _isPasswordSectionValid;
+
   @override
   void dispose() {
+    _firstNameController.removeListener(_onFormFieldChanged);
+    _lastNameController.removeListener(_onFormFieldChanged);
+    _usernameController.removeListener(_onFormFieldChanged);
+    _emailController.removeListener(_onFormFieldChanged);
+    _phoneController.removeListener(_onFormFieldChanged);
+    _currentPasswordController.removeListener(_onFormFieldChanged);
+    _newPasswordController.removeListener(_onFormFieldChanged);
+    _newPasswordConfirmController.removeListener(_onFormFieldChanged);
     _firstNameController.dispose();
     _lastNameController.dispose();
     _usernameController.dispose();
@@ -58,6 +128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _updateProfile() async {
+    _didAttemptSubmit = true;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -88,21 +159,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ).update(updateRequest);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully'),
-            backgroundColor: EasyParkColors.success,
-          ),
-        );
+        FocusScope.of(context).unfocus();
         _currentPasswordController.clear();
         _newPasswordController.clear();
         _newPasswordConfirmController.clear();
+        setState(() {
+          _profileNotice = 'Profile updated successfully.';
+          _profileNoticeIsError = false;
+        });
+        AppFeedback.success('Profile updated successfully.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: EasyParkColors.error),
-        );
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
+        setState(() {
+          _profileNotice = errorMessage;
+          _profileNoticeIsError = true;
+        });
+        AppFeedback.error(errorMessage);
       }
     } finally {
       if (mounted) {
@@ -115,13 +189,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: EasyParkColors.accent.withValues(alpha: 0.06),
-      body: SingleChildScrollView(
+    return ColoredBox(
+      color: EasyParkColors.accent.withValues(alpha: 0.06),
+      child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
+            autovalidateMode: _didAttemptSubmit
+                ? AutovalidateMode.always
+                : AutovalidateMode.onUserInteraction,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -155,6 +232,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
+                if (_profileNotice != null) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _profileNoticeIsError
+                          ? EasyParkColors.error.withValues(alpha: 0.15)
+                          : EasyParkColors.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _profileNoticeIsError
+                            ? EasyParkColors.error
+                            : EasyParkColors.success,
+                      ),
+                    ),
+                    child: Text(
+                      _profileNotice!,
+                      style: TextStyle(
+                        color: _profileNoticeIsError
+                            ? EasyParkColors.error
+                            : EasyParkColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 const Text(
                   "Personal Information",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -217,7 +321,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _updateProfile,
+                    onPressed: _canSaveProfile ? _updateProfile : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: EasyParkColors.accent,
                       foregroundColor: EasyParkColors.onAccent,
@@ -266,15 +370,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
       validator: (value) {
-        if (!isPassword && (value == null || value.trim().isEmpty)) {
-          if (label != 'Phone') {
-            return 'Please enter \$label';
-          }
+        if (!isPassword && label == 'Email') {
+          return InputValidators.email(value);
+        }
+        if (!isPassword && label == 'Phone') {
+          return InputValidators.phoneOptional(value);
+        }
+        if (!isPassword) {
+          return InputValidators.requiredText(value, label);
         }
         if (isPassword && label == 'Confirm New Password') {
           if (_newPasswordController.text.isNotEmpty &&
               value != _newPasswordController.text) {
             return 'Passwords do not match';
+          }
+        }
+        if (isPassword && label == 'New Password') {
+          if ((value ?? '').isNotEmpty) {
+            return InputValidators.passwordStrong(
+              value,
+              fieldName: 'New password',
+            );
           }
         }
         if (isPassword && label == 'Current Password') {

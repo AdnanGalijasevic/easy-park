@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:easypark_desktop/models/user_model.dart';
 import 'package:easypark_desktop/providers/auth_provider.dart';
 import 'package:easypark_desktop/services/base_service.dart';
+import 'package:easypark_desktop/utils/api_error_parser.dart';
 import 'package:http/http.dart' as http;
 
 class UserService extends BaseService<User> {
@@ -19,7 +20,12 @@ class UserService extends BaseService<User> {
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_parseLoginError(response));
+      if (response.statusCode == 401) {
+        throw Exception('Wrong email or password.');
+      }
+      throw Exception(
+        extractApiErrorMessage(response.body) ?? 'Login failed. Check credentials.',
+      );
     }
 
     final data = jsonDecode(response.body);
@@ -32,19 +38,47 @@ class UserService extends BaseService<User> {
     return user;
   }
 
-  String _parseLoginError(http.Response response) {
-    try {
-      final data = jsonDecode(response.body);
-      if (data is Map<String, dynamic>) {
-        final errors = data['errors'];
-        if (errors is Map<String, dynamic>) {
-          final userErrors = errors['userError'];
-          if (userErrors is List && userErrors.isNotEmpty) return userErrors.first.toString();
-        }
-        final msg = data['message'] ?? data['error'];
-        if (msg != null) return msg.toString();
-      }
-    } catch (_) {}
-    return 'Login failed. Check credentials.';
+  Future<void> requestPasswordReset(String emailOrUsername) async {
+    final uri = Uri.parse('${BaseService.baseUrl}User/forgot-password');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json', 'X-Client-Type': 'desktop'},
+      body: jsonEncode({'emailOrUsername': emailOrUsername.trim()}),
+    );
+
+    if (response.statusCode != 200 &&
+        response.statusCode != 201 &&
+        response.statusCode != 204) {
+      throw Exception(
+        extractApiErrorMessage(response.body) ??
+            'Unable to send reset instructions. Verify input and try again.',
+      );
+    }
+  }
+
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final uri = Uri.parse('${BaseService.baseUrl}User/reset-password');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json', 'X-Client-Type': 'desktop'},
+      body: jsonEncode({
+        'token': token.trim(),
+        'newPassword': newPassword,
+        'confirmPassword': confirmPassword,
+      }),
+    );
+
+    if (response.statusCode != 200 &&
+        response.statusCode != 201 &&
+        response.statusCode != 204) {
+      throw Exception(
+        extractApiErrorMessage(response.body) ??
+            'Password reset failed. Check token and password format.',
+      );
+    }
   }
 }

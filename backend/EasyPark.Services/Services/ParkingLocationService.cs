@@ -2,10 +2,12 @@ using MapsterMapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Security.Claims;
 using EasyPark.Model;
+using EasyPark.Model.Constants;
 using EasyPark.Model.Models;
 using EasyPark.Model.Requests;
 using EasyPark.Model.SearchObjects;
@@ -15,6 +17,7 @@ using EasyPark.Services.Interfaces;
 using ParkingLocationModel = EasyPark.Model.Models.ParkingLocation;
 using ParkingLocationDb = EasyPark.Services.Database.ParkingLocation;
 using ReservationDb = EasyPark.Services.Database.Reservation;
+using BookmarkDb = EasyPark.Services.Database.Bookmark;
 using CityCoordinateModel = EasyPark.Model.Models.CityCoordinate;
 
 namespace EasyPark.Services.Services
@@ -30,20 +33,15 @@ namespace EasyPark.Services.Services
 
         public override ParkingLocationModel Insert(ParkingLocationInsertRequest request)
         {
-            // Create entity from request
             ParkingLocationDb entity = Mapper.Map<ParkingLocationDb>(request);
             ApplyPhotoFromBase64(request.Photo, entity, allowClear: true);
-            
-            // Call BeforeInsert which will set calculated fields
+
             BeforeInsert(request, entity);
-            
+
             Context.Add(entity);
             Context.SaveChanges();
 
-            // Load ParkingSpots to calculate TotalSpots
             Context.Entry(entity).Collection(e => e.ParkingSpots).Load();
-
-            // Return fully hydrated model (City/CreatedBy loaded) to avoid null mapping issues.
             return GetById(entity.Id);
         }
 
@@ -53,15 +51,107 @@ namespace EasyPark.Services.Services
 
             var entity = Context.Set<ParkingLocationDb>().Find(id);
             if (entity == null)
-                throw new UserException("Record not found", HttpStatusCode.NotFound);
+                throw new NotFoundException("Parking location not found");
 
             BeforeUpdate(request, entity);
 
             Mapper.Map(request, entity);
             Context.SaveChanges();
 
-            // Return fully hydrated model (City/CreatedBy loaded) to avoid null mapping issues.
             return GetById(id);
+        }
+
+        public override void Delete(int id)
+        {
+            var entity = Context.Set<ParkingLocationDb>().Find(id);
+            if (entity == null)
+            {
+                throw new NotFoundException("Parking location not found");
+            }
+
+            var relatedSpotIds = Context.ParkingSpots
+                .Where(s => s.ParkingLocationId == id)
+                .Select(s => s.Id)
+                .ToList();
+
+            var relatedReservations = relatedSpotIds.Count == 0
+                ? new List<ReservationDb>()
+                : Context.Reservations
+                    .Where(r => relatedSpotIds.Contains(r.ParkingSpotId))
+                    .ToList();
+
+            foreach (var reservation in relatedReservations)
+            {
+                var isRefundable =
+                    reservation.Status != ReservationStatus.Cancelled &&
+                    reservation.Status != ReservationStatus.Expired &&
+                    reservation.TotalPrice > 0;
+
+                if (isRefundable)
+                {
+                    var alreadyRefunded = Context.Transactions.Any(t =>
+                        t.ReservationId == reservation.Id &&
+                        t.Status == TransactionStatus.Refunded);
+
+                    if (!alreadyRefunded)
+                    {
+                        var user = Context.Users.Find(reservation.UserId);
+                        if (user != null)
+                        {
+                            user.Coins += reservation.TotalPrice;
+                        }
+
+                        Context.Transactions.Add(new Database.Transaction
+                        {
+                            UserId = reservation.UserId,
+                            ReservationId = reservation.Id,
+                            Amount = reservation.TotalPrice,
+                            Currency = "BAM",
+                            PaymentMethod = "Coins",
+                            Status = TransactionStatus.Refunded,
+                            CreatedAt = DateTime.UtcNow,
+                            PaymentDate = DateTime.UtcNow
+                        });
+                    }
+                }
+            }
+
+            var relatedReviews = Context.Reviews.Where(r => r.ParkingLocationId == id).ToList();
+            if (relatedReviews.Count > 0)
+            {
+                Context.Reviews.RemoveRange(relatedReviews);
+            }
+
+            var relatedBookmarks = Context.Bookmarks.Where(b => b.ParkingLocationId == id).ToList();
+            if (relatedBookmarks.Count > 0)
+            {
+                Context.Bookmarks.RemoveRange(relatedBookmarks);
+            }
+
+            var relatedReservationIds = relatedReservations.Select(r => r.Id).ToList();
+            if (relatedReservationIds.Count > 0)
+            {
+                var relatedHistories = Context.ReservationHistories
+                    .Where(h => relatedReservationIds.Contains(h.ReservationId))
+                    .ToList();
+                if (relatedHistories.Count > 0)
+                {
+                    Context.ReservationHistories.RemoveRange(relatedHistories);
+                }
+
+                Context.Reservations.RemoveRange(relatedReservations);
+            }
+
+            if (relatedSpotIds.Count > 0)
+            {
+                var relatedSpots = Context.ParkingSpots
+                    .Where(s => relatedSpotIds.Contains(s.Id))
+                    .ToList();
+                Context.ParkingSpots.RemoveRange(relatedSpots);
+            }
+
+            Context.Set<ParkingLocationDb>().Remove(entity);
+            Context.SaveChanges();
         }
 
         public override IQueryable<ParkingLocationDb> AddFilter(ParkingLocationSearchObject search, IQueryable<ParkingLocationDb> query)
@@ -182,16 +272,11 @@ namespace EasyPark.Services.Services
                 throw new UserException("Selected city does not exist", HttpStatusCode.BadRequest);
             }
 
-            // TotalSpots is NOT stored in DB - it is calculated dynamically from ParkingSpots.Count in DTO
-            // No validation needed - TotalSpots doesn't exist in DB model
-
             if (request.PricePerHour < 0)
             {
                 throw new UserException("Price per hour cannot be negative", HttpStatusCode.BadRequest);
             }
 
-            // Set calculated fields (automatically set, not from request)
-            // TotalSpots is NOT stored in DB - it is calculated dynamically from ParkingSpots.Count
             entity.AverageRating = 0;
             entity.TotalReviews = 0;
             entity.PopularityScore = 0;
@@ -206,11 +291,8 @@ namespace EasyPark.Services.Services
         {
             if (entity == null)
             {
-                throw new UserException("Parking location not found", HttpStatusCode.NotFound);
+                throw new NotFoundException("Parking location not found");
             }
-
-            // TotalSpots is NOT stored in DB - it is calculated dynamically from ParkingSpots.Count in DTO
-            // No validation needed - TotalSpots doesn't exist in DB model
 
             if (request.PricePerHour.HasValue && request.PricePerHour.Value < 0)
             {
@@ -226,7 +308,6 @@ namespace EasyPark.Services.Services
                 }
             }
 
-            // Set automatic field
             entity.UpdatedAt = DateTime.UtcNow;
 
             if (request.Photo != null)
@@ -234,8 +315,7 @@ namespace EasyPark.Services.Services
                 ApplyPhotoFromBase64(request.Photo, entity, allowClear: true);
                 request.Photo = null;
             }
-            
-            // TotalSpots is NOT stored in DB - it is calculated dynamically from ParkingSpots.Count in DTO
+
         }
 
         private static void ApplyPhotoFromBase64(string? rawPhoto, ParkingLocationDb entity, bool allowClear)
@@ -255,20 +335,90 @@ namespace EasyPark.Services.Services
                 return;
             }
 
+            string? declaredMime = null;
             var commaIndex = normalized.IndexOf(',');
             if (commaIndex >= 0 && normalized.Contains(";base64", StringComparison.OrdinalIgnoreCase))
             {
+                var metadata = normalized[..commaIndex];
                 normalized = normalized[(commaIndex + 1)..];
+                if (metadata.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var mimePart = metadata[5..];
+                    var semicolonIndex = mimePart.IndexOf(';');
+                    declaredMime = semicolonIndex >= 0 ? mimePart[..semicolonIndex] : mimePart;
+                }
             }
 
             try
             {
-                entity.Photo = Convert.FromBase64String(normalized);
+                var bytes = Convert.FromBase64String(normalized);
+                ValidatePhotoMimeType(declaredMime, bytes);
+                entity.Photo = bytes;
             }
             catch (FormatException)
             {
                 throw new UserException("Photo must be a valid base64 string", HttpStatusCode.BadRequest);
             }
+        }
+
+        private static void ValidatePhotoMimeType(string? declaredMime, byte[] bytes)
+        {
+            if (bytes.Length == 0)
+            {
+                throw new UserException("Photo content cannot be empty", HttpStatusCode.BadRequest);
+            }
+
+            if (!string.IsNullOrWhiteSpace(declaredMime))
+            {
+                var allowedMime = declaredMime.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase)
+                                  || declaredMime.Equals("image/png", StringComparison.OrdinalIgnoreCase)
+                                  || declaredMime.Equals("image/webp", StringComparison.OrdinalIgnoreCase);
+                if (!allowedMime)
+                {
+                    throw new UserException("Unsupported image type. Allowed: image/jpeg, image/png, image/webp.", HttpStatusCode.BadRequest);
+                }
+            }
+
+            if (IsJpeg(bytes) || IsPng(bytes) || IsWebp(bytes))
+            {
+                return;
+            }
+
+            throw new UserException("Invalid image content. Supported formats are JPEG, PNG, and WEBP.", HttpStatusCode.BadRequest);
+        }
+
+        private static bool IsJpeg(byte[] bytes)
+        {
+            return bytes.Length >= 3
+                   && bytes[0] == 0xFF
+                   && bytes[1] == 0xD8
+                   && bytes[2] == 0xFF;
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes.Length >= 8
+                   && bytes[0] == 0x89
+                   && bytes[1] == 0x50
+                   && bytes[2] == 0x4E
+                   && bytes[3] == 0x47
+                   && bytes[4] == 0x0D
+                   && bytes[5] == 0x0A
+                   && bytes[6] == 0x1A
+                   && bytes[7] == 0x0A;
+        }
+
+        private static bool IsWebp(byte[] bytes)
+        {
+            return bytes.Length >= 12
+                   && bytes[0] == 0x52 // R
+                   && bytes[1] == 0x49 // I
+                   && bytes[2] == 0x46 // F
+                   && bytes[3] == 0x46 // F
+                   && bytes[8] == 0x57 // W
+                   && bytes[9] == 0x45 // E
+                   && bytes[10] == 0x42 // B
+                   && bytes[11] == 0x50; // P
         }
 
         public override ParkingLocationModel GetById(int id)
@@ -281,7 +431,7 @@ namespace EasyPark.Services.Services
 
             if (entity == null)
             {
-                throw new UserException("Parking location not found", HttpStatusCode.NotFound);
+                throw new NotFoundException("Parking location not found");
             }
 
             var model = Mapper.Map<ParkingLocationModel>(entity);
@@ -308,7 +458,6 @@ namespace EasyPark.Services.Services
 
             result = Mapper.Map(list, result);
             
-            // Calculate TotalSpots dynamically
             for (int i = 0; i < list.Count; i++)
             {
                 result[i].TotalSpots = list[i].ParkingSpots.Count;
@@ -331,7 +480,7 @@ namespace EasyPark.Services.Services
             var parkingLocation = Context.Set<ParkingLocationDb>().Find(parkingLocationId);
             if (parkingLocation == null)
             {
-                throw new UserException("Parking location not found", HttpStatusCode.NotFound);
+                throw new NotFoundException("Parking location not found");
             }
 
             var reviews = Context.Set<Database.Review>()
@@ -349,25 +498,25 @@ namespace EasyPark.Services.Services
                 parkingLocation.AverageRating = 0;
             }
 
-            // Update PopularityScore based on multiple factors
-            // This is a simple calculation - can be enhanced later
-            // PopularityScore could be based on: reservations count, reviews count, average rating, etc.
-            // For now, we'll set it to 0 or calculate it when Review/Reservation tables are created
-
             Context.SaveChanges();
         }
 
         /// <summary>
         /// Content-Based Filtering (CBF) recommendation algorithm.
-        /// Builds a user preference profile from completed reservations, then scores all active locations
-        /// by feature similarity (12 boolean amenities + price range). Haversine distance bonus applied
-        /// when user GPS coordinates are provided. Returns scores in [0.0, 1.0] range.
+        /// Builds a user preference profile from completed reservations and bookmarks (bookmarks weighted 0.5×),
+        /// then scores all active locations by:
+        ///   - Feature similarity: 12 boolean amenities × 0.06 each (max 0.72)
+        ///   - Price similarity: up to 0.15
+        ///   - AverageRating: (rating/5) × 0.13
+        ///   - Haversine distance bonus: up to 0.12 when lat/lon provided
+        /// Fallback when user has no history: returns top-rated locations by AverageRating.
+        /// Returns scores in [0.0, 1.0] range, up to <paramref name="count"/> results (default 3, max 10).
         /// </summary>
-        public List<EasyPark.Model.Models.ParkingLocation> GetRecommendationScores(int userId, int? cityId = null)
+        public List<EasyPark.Model.Models.ParkingLocation> GetRecommendationScores(int userId, int? cityId = null, double? userLat = null, double? userLon = null, int count = 3)
         {
+            int resultCount = Math.Clamp(count, 1, 10);
             var scoredLocations = new List<(ParkingLocationDb Location, decimal Score, string Explanation)>();
 
-            // Get user's previous completed reservations
             var userReservations = Context.Set<ReservationDb>()
                 .Include(r => r.ParkingSpot)
                     .ThenInclude(ps => ps.ParkingLocation)
@@ -389,13 +538,13 @@ namespace EasyPark.Services.Services
 
                 var fallbackLocations = fallbackQuery.ToList();
 
-                var fallbackTop3 = fallbackLocations
+                var fallbackTop = fallbackLocations
                     .OrderByDescending(l => l.AverageRating)
-                    .Take(3)
+                    .Take(resultCount)
                     .ToList();
 
                 var fallbackResultList = new List<EasyPark.Model.Models.ParkingLocation>();
-                foreach (var item in fallbackTop3)
+                foreach (var item in fallbackTop)
                 {
                     var dto = Mapper.Map<EasyPark.Model.Models.ParkingLocation>(item);
                     dto.CbfScore = item.AverageRating > 0 ? Math.Round((item.AverageRating / 5.0m) * 100, 0) : 50;
@@ -405,31 +554,52 @@ namespace EasyPark.Services.Services
                 return fallbackResultList;
             }
 
-            // Analyze user preferences from previous reservations
             var userPreferredLocations = userReservations
                 .Select(r => r.ParkingSpot.ParkingLocation)
                 .GroupBy(l => l.Id)
                 .Select(g => g.First())
                 .ToList();
 
-            // Calculate average preferences from user's previous locations
-            var avgHasVideoSurveillance = userPreferredLocations.Average(l => l.HasVideoSurveillance ? 1.0m : 0.0m);
-            var avgHasNightSurveillance = userPreferredLocations.Average(l => l.HasNightSurveillance ? 1.0m : 0.0m);
-            var avgHasDisabledSpots = userPreferredLocations.Average(l => LocationHasActiveSpotType(l, "Disabled") ? 1.0m : 0.0m);
-            var avgHasRamp = userPreferredLocations.Average(l => l.HasRamp ? 1.0m : 0.0m);
-            var avgIs24Hours = userPreferredLocations.Average(l => l.Is24Hours ? 1.0m : 0.0m);
-            var avgHasOnlinePayment = userPreferredLocations.Average(l => l.HasOnlinePayment ? 1.0m : 0.0m);
-            var avgHasElectricCharging = userPreferredLocations.Average(l => LocationHasActiveSpotType(l, "Electric") ? 1.0m : 0.0m);
-            var avgHasCoveredSpots = userPreferredLocations.Average(l => LocationHasActiveSpotType(l, "Covered") ? 1.0m : 0.0m);
-            var avgHasSecurityGuard = userPreferredLocations.Average(l => l.HasSecurityGuard ? 1.0m : 0.0m);
-            var avgHasWifi = userPreferredLocations.Average(l => l.HasWifi ? 1.0m : 0.0m);
-            var avgHasRestroom = userPreferredLocations.Average(l => l.HasRestroom ? 1.0m : 0.0m);
-            var avgHasAttendant = userPreferredLocations.Average(l => l.HasAttendant ? 1.0m : 0.0m);
+            // Load bookmarks and merge into profile with weight 0.5 (weaker signal than completed reservation).
+            var bookmarkedLocationIds = Context.Set<BookmarkDb>()
+                .Where(b => b.UserId == userId)
+                .Select(b => b.ParkingLocationId)
+                .ToList();
 
-            // Get average price preference
-            var avgPricePerHour = userPreferredLocations.Average(l => (double)l.PricePerHour);
+            var bookmarkedLocations = Context.Set<ParkingLocationDb>()
+                .Include(pl => pl.ParkingSpots)
+                .Where(pl => bookmarkedLocationIds.Contains(pl.Id))
+                .ToList();
 
-            // Get all active parking locations (filtered by city if provided)
+            int resCount = userPreferredLocations.Count;
+            int bmkCount = bookmarkedLocations.Count;
+            decimal totalWeight = resCount * 1.0m + bmkCount * 0.5m;
+
+            decimal WeightedAvg(Func<ParkingLocationDb, decimal> selector) =>
+                totalWeight == 0 ? 0 :
+                (userPreferredLocations.Sum(l => selector(l) * 1.0m)
+                 + bookmarkedLocations.Sum(l => selector(l) * 0.5m)) / totalWeight;
+
+            var avgHasVideoSurveillance = WeightedAvg(l => l.HasVideoSurveillance ? 1.0m : 0.0m);
+            var avgHasNightSurveillance = WeightedAvg(l => l.HasNightSurveillance ? 1.0m : 0.0m);
+            var avgHasDisabledSpots = WeightedAvg(l => LocationHasActiveSpotType(l, "Disabled") ? 1.0m : 0.0m);
+            var avgHasRamp = WeightedAvg(l => l.HasRamp ? 1.0m : 0.0m);
+            var avgIs24Hours = WeightedAvg(l => l.Is24Hours ? 1.0m : 0.0m);
+            var avgHasOnlinePayment = WeightedAvg(l => l.HasOnlinePayment ? 1.0m : 0.0m);
+            var avgHasElectricCharging = WeightedAvg(l => LocationHasActiveSpotType(l, "Electric") ? 1.0m : 0.0m);
+            var avgHasCoveredSpots = WeightedAvg(l => LocationHasActiveSpotType(l, "Covered") ? 1.0m : 0.0m);
+            var avgHasSecurityGuard = WeightedAvg(l => l.HasSecurityGuard ? 1.0m : 0.0m);
+            var avgHasWifi = WeightedAvg(l => l.HasWifi ? 1.0m : 0.0m);
+            var avgHasRestroom = WeightedAvg(l => l.HasRestroom ? 1.0m : 0.0m);
+            var avgHasAttendant = WeightedAvg(l => l.HasAttendant ? 1.0m : 0.0m);
+
+            var allProfileLocations = userPreferredLocations.Concat(bookmarkedLocations).ToList();
+            var avgPricePerHour = totalWeight == 0 ? 0.0
+                : (userPreferredLocations.Sum(l => (double)l.PricePerHour * 1.0)
+                   + bookmarkedLocations.Sum(l => (double)l.PricePerHour * 0.5)) / (double)totalWeight;
+
+            var bookmarkedIdSet = new HashSet<int>(bookmarkedLocationIds);
+
             var locationQuery = Context.Set<ParkingLocationDb>()
                 .Include(pl => pl.ParkingSpots)
                 .Include(pl => pl.City)
@@ -441,71 +611,88 @@ namespace EasyPark.Services.Services
 
             var allLocations = locationQuery.ToList();
 
-            // Score each location: 12 boolean features × 0.08 (max 0.96) + price (0.20) + distance bonus (0.16)
             foreach (var location in allLocations)
             {
                 decimal matchScore = 0.0m;
+                var reasons = new List<string>();
 
                 var matchedFeatures = new List<string>();
-                if (Math.Abs((location.HasVideoSurveillance ? 1.0m : 0.0m) - avgHasVideoSurveillance) < 0.5m) { matchScore += 0.08m; if(location.HasVideoSurveillance) matchedFeatures.Add("Video Surveillance"); }
-                if (Math.Abs((location.HasNightSurveillance ? 1.0m : 0.0m) - avgHasNightSurveillance) < 0.5m) { matchScore += 0.08m; if(location.HasNightSurveillance) matchedFeatures.Add("Night Surveillance"); }
-                if (Math.Abs((LocationHasActiveSpotType(location, "Disabled") ? 1.0m : 0.0m) - avgHasDisabledSpots) < 0.5m) { matchScore += 0.08m; if(LocationHasActiveSpotType(location, "Disabled")) matchedFeatures.Add("Disabled Spots"); }
-                if (Math.Abs((location.HasRamp ? 1.0m : 0.0m) - avgHasRamp) < 0.5m) { matchScore += 0.08m; if(location.HasRamp) matchedFeatures.Add("Ramp"); }
-                if (Math.Abs((location.Is24Hours ? 1.0m : 0.0m) - avgIs24Hours) < 0.5m) { matchScore += 0.08m; if(location.Is24Hours) matchedFeatures.Add("24h"); }
-                if (Math.Abs((location.HasOnlinePayment ? 1.0m : 0.0m) - avgHasOnlinePayment) < 0.5m) { matchScore += 0.08m; if(location.HasOnlinePayment) matchedFeatures.Add("Online Payment"); }
-                if (Math.Abs((LocationHasActiveSpotType(location, "Electric") ? 1.0m : 0.0m) - avgHasElectricCharging) < 0.5m) { matchScore += 0.08m; if(LocationHasActiveSpotType(location, "Electric")) matchedFeatures.Add("EV Charging"); }
-                if (Math.Abs((LocationHasActiveSpotType(location, "Covered") ? 1.0m : 0.0m) - avgHasCoveredSpots) < 0.5m) { matchScore += 0.08m; if(LocationHasActiveSpotType(location, "Covered")) matchedFeatures.Add("Covered Spots"); }
-                if (Math.Abs((location.HasSecurityGuard ? 1.0m : 0.0m) - avgHasSecurityGuard) < 0.5m) { matchScore += 0.08m; if(location.HasSecurityGuard) matchedFeatures.Add("Security Guard"); }
-                if (Math.Abs((location.HasWifi ? 1.0m : 0.0m) - avgHasWifi) < 0.5m) { matchScore += 0.08m; if(location.HasWifi) matchedFeatures.Add("WiFi"); }
-                if (Math.Abs((location.HasRestroom ? 1.0m : 0.0m) - avgHasRestroom) < 0.5m) { matchScore += 0.08m; if(location.HasRestroom) matchedFeatures.Add("Restrooms"); }
-                if (Math.Abs((location.HasAttendant ? 1.0m : 0.0m) - avgHasAttendant) < 0.5m) { matchScore += 0.08m; if(location.HasAttendant) matchedFeatures.Add("Attendant"); }
+                if (Math.Abs((location.HasVideoSurveillance ? 1.0m : 0.0m) - avgHasVideoSurveillance) < 0.5m) { matchScore += 0.06m; if (location.HasVideoSurveillance) matchedFeatures.Add("Video Surveillance"); }
+                if (Math.Abs((location.HasNightSurveillance ? 1.0m : 0.0m) - avgHasNightSurveillance) < 0.5m) { matchScore += 0.06m; if (location.HasNightSurveillance) matchedFeatures.Add("Night Surveillance"); }
+                if (Math.Abs((LocationHasActiveSpotType(location, "Disabled") ? 1.0m : 0.0m) - avgHasDisabledSpots) < 0.5m) { matchScore += 0.06m; if (LocationHasActiveSpotType(location, "Disabled")) matchedFeatures.Add("Disabled Spots"); }
+                if (Math.Abs((location.HasRamp ? 1.0m : 0.0m) - avgHasRamp) < 0.5m) { matchScore += 0.06m; if (location.HasRamp) matchedFeatures.Add("Ramp"); }
+                if (Math.Abs((location.Is24Hours ? 1.0m : 0.0m) - avgIs24Hours) < 0.5m) { matchScore += 0.06m; if (location.Is24Hours) matchedFeatures.Add("24h"); }
+                if (Math.Abs((location.HasOnlinePayment ? 1.0m : 0.0m) - avgHasOnlinePayment) < 0.5m) { matchScore += 0.06m; if (location.HasOnlinePayment) matchedFeatures.Add("Online Payment"); }
+                if (Math.Abs((LocationHasActiveSpotType(location, "Electric") ? 1.0m : 0.0m) - avgHasElectricCharging) < 0.5m) { matchScore += 0.06m; if (LocationHasActiveSpotType(location, "Electric")) matchedFeatures.Add("EV Charging"); }
+                if (Math.Abs((LocationHasActiveSpotType(location, "Covered") ? 1.0m : 0.0m) - avgHasCoveredSpots) < 0.5m) { matchScore += 0.06m; if (LocationHasActiveSpotType(location, "Covered")) matchedFeatures.Add("Covered Spots"); }
+                if (Math.Abs((location.HasSecurityGuard ? 1.0m : 0.0m) - avgHasSecurityGuard) < 0.5m) { matchScore += 0.06m; if (location.HasSecurityGuard) matchedFeatures.Add("Security Guard"); }
+                if (Math.Abs((location.HasWifi ? 1.0m : 0.0m) - avgHasWifi) < 0.5m) { matchScore += 0.06m; if (location.HasWifi) matchedFeatures.Add("WiFi"); }
+                if (Math.Abs((location.HasRestroom ? 1.0m : 0.0m) - avgHasRestroom) < 0.5m) { matchScore += 0.06m; if (location.HasRestroom) matchedFeatures.Add("Restrooms"); }
+                if (Math.Abs((location.HasAttendant ? 1.0m : 0.0m) - avgHasAttendant) < 0.5m) { matchScore += 0.06m; if (location.HasAttendant) matchedFeatures.Add("Attendant"); }
 
-                // Price similarity (normalized, max 0.2 points)
                 var priceDiff = Math.Abs((double)location.PricePerHour - avgPricePerHour);
-                var maxPrice = userPreferredLocations.Max(l => (double)l.PricePerHour);
-                var minPrice = userPreferredLocations.Min(l => (double)l.PricePerHour);
+                var maxPrice = allProfileLocations.Count > 0 ? allProfileLocations.Max(l => (double)l.PricePerHour) : 0.0;
+                var minPrice = allProfileLocations.Count > 0 ? allProfileLocations.Min(l => (double)l.PricePerHour) : 0.0;
                 var priceRange = maxPrice - minPrice;
-                bool goodPrice = false;
                 if (priceRange > 0)
                 {
                     var priceSimilarity = 1.0m - (decimal)(Math.Min(priceDiff / priceRange, 1.0));
-                    matchScore += priceSimilarity * 0.2m;
-                    if (priceSimilarity > 0.7m) goodPrice = true;
+                    matchScore += priceSimilarity * 0.15m;
+                    if (priceSimilarity > 0.7m) reasons.Add("Price fits your preference");
                 }
                 else
                 {
-                    matchScore += 0.2m; // If all prices are same, give full points
-                    goodPrice = true;
+                    matchScore += 0.15m;
+                    reasons.Add("Price fits your preference");
                 }
 
-                // Normalize score to 0.0-1.0 range
+                // AverageRating component (weight 0.13).
+                decimal ratingScore = location.AverageRating > 0
+                    ? (location.AverageRating / 5.0m) * 0.13m
+                    : 0m;
+                matchScore += ratingScore;
+
+                if (location.AverageRating >= 4.0m)
+                    reasons.Add($"Highly rated ({location.AverageRating:F1}★)");
+                else if (location.AverageRating >= 3.0m)
+                    reasons.Add($"Well rated ({location.AverageRating:F1}★)");
+                else if (location.AverageRating > 0m)
+                    reasons.Add($"Rated ({location.AverageRating:F1}★)");
+
+                // Haversine distance bonus when user coordinates are provided.
+                if (userLat.HasValue && userLon.HasValue
+                    && location.Latitude != 0 && location.Longitude != 0)
+                {
+                    var km = HaversineDistance(userLat.Value, userLon.Value,
+                                               (double)location.Latitude,
+                                               (double)location.Longitude);
+                    if (km <= 2) { matchScore += 0.12m; reasons.Add("Very close to you"); }
+                    else if (km <= 5) { matchScore += 0.07m; reasons.Add("Near you"); }
+                    else if (km <= 10) matchScore += 0.03m;
+                }
+
+                if (bookmarkedIdSet.Contains(location.Id))
+                    reasons.Add("You bookmarked a similar location");
+
+                if (matchedFeatures.Any())
+                    reasons.Add("Has " + string.Join(", ", matchedFeatures.Take(2)));
+
                 var normalizedScore = Math.Min(1.0m, Math.Max(0.0m, matchScore));
 
-                // Distance factor removed — city filter handles proximity now.
-
-                string explanation = "Good match based on your history.";
-                var reasons = new List<string>();
-                if (goodPrice) reasons.Add("Price fits your preference");
-                if (matchedFeatures.Any())
-                {
-                    reasons.Add("Has " + string.Join(", ", matchedFeatures.Take(2)));
-                }
-
-                if (reasons.Any())
-                {
-                    explanation = string.Join(". ", reasons) + ".";
-                }
+                string explanation = reasons.Any()
+                    ? string.Join(". ", reasons) + "."
+                    : "Good match based on your history.";
 
                 scoredLocations.Add((location, normalizedScore, explanation));
             }
 
-            var top3 = scoredLocations.OrderByDescending(x => x.Score).Take(3).ToList();
+            var topN = scoredLocations.OrderByDescending(x => x.Score).Take(resultCount).ToList();
             var resultList = new List<EasyPark.Model.Models.ParkingLocation>();
 
-            foreach (var item in top3)
+            foreach (var item in topN)
             {
                 var dto = Mapper.Map<EasyPark.Model.Models.ParkingLocation>(item.Location);
-                dto.CbfScore = Math.Round(item.Score * 100, 0); // Convert to percentage
+                dto.CbfScore = Math.Round(item.Score * 100, 0);
                 dto.CbfExplanation = item.Explanation;
                 resultList.Add(dto);
             }
@@ -527,11 +714,18 @@ namespace EasyPark.Services.Services
 
         public List<SpotTypeAvailability> GetAvailability(int locationId, DateTime from, DateTime to)
         {
+            if (from == default) from = DateTime.UtcNow.Date;
+            if (to == default || to <= from) to = from.AddDays(1);
+            if ((to - from).TotalDays > 7)
+            {
+                throw new UserException("Availability range cannot exceed 7 days.", HttpStatusCode.BadRequest);
+            }
+
             var location = Context.ParkingLocations
                 .Include(pl => pl.ParkingSpots)
                 .FirstOrDefault(pl => pl.Id == locationId);
             if (location == null)
-                throw new UserException("Parking location not found", HttpStatusCode.NotFound);
+                throw new NotFoundException("Parking location not found");
 
             var spotTypes = new[] { "Regular", "Disabled", "Electric", "Covered" };
             var results = new List<SpotTypeAvailability>();
@@ -566,7 +760,7 @@ namespace EasyPark.Services.Services
                         r.Status != "Expired" &&
                         r.StartTime < to &&
                         r.EndTime > from)
-                    .Select(r => new { r.StartTime, r.EndTime })
+                    .Select(r => new { r.ParkingSpotId, r.StartTime, r.EndTime })
                     .ToList();
 
                 var intervals = reservations
@@ -574,7 +768,7 @@ namespace EasyPark.Services.Services
                     {
                         var s = r.StartTime < from ? from : r.StartTime;
                         var e = r.EndTime > to ? to : r.EndTime;
-                        return (Start: s, End: e);
+                        return (r.ParkingSpotId, Start: s, End: e);
                     })
                     .Where(x => x.Start < x.End)
                     .ToList();
@@ -593,7 +787,11 @@ namespace EasyPark.Services.Services
                     var segEnd = points[i + 1];
                     if (segStart >= segEnd) continue;
 
-                    var overlapping = intervals.Count(iv => iv.Start < segEnd && iv.End > segStart);
+                    var overlapping = intervals
+                        .Where(iv => iv.Start < segEnd && iv.End > segStart)
+                        .Select(iv => iv.ParkingSpotId)
+                        .Distinct()
+                        .Count();
                     var available = Math.Max(0, total - overlapping);
 
                     var slot = new TimeSlot

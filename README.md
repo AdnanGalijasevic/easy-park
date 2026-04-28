@@ -33,7 +33,7 @@ From `frontend/easypark_desktop`:
 
 ```powershell
 flutter pub get
-flutter run -d windows --dart-define=baseUrl=http://localhost:8080/
+flutter run -d windows --dart-define=API_BASE=http://localhost:8080/
 ```
 
 ## 3) Run mobile app
@@ -42,21 +42,17 @@ From `frontend/easypark_mobile`:
 
 ```powershell
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+flutter run --dart-define=API_BASE=http://10.0.2.2:8080
 ```
 
-For physical device, replace `API_BASE_URL` with your machine IP.
+For physical device, replace `API_BASE` with your machine IP.
 
-## 4) Access credentials (RSII format)
+## 4) Test credentials
 
-Desktop verzija:
-- Korisničko ime: `desktop`
-- Lozinka: `test`
+| Context | Username | Password |
+|---------|----------|---------|
+| Desktop (admin) | desktop | test |
+| Mobile (user) | mobile | test |
+| Admin role | admin | test |
+| User role | user | test |
 
-Mobilna verzija:
-- Korisničko ime: `mobile`
-- Lozinka: `test`
-
-Ako aplikacija koristi dodatne uloge, koristite format:
-- Korisničko ime: `nazivUloge`
-- Lozinka: `test`

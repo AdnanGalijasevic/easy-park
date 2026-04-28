@@ -22,30 +22,26 @@ namespace EasyPark.API.Controllers
             _service = service;
         }
 
-        [AllowAnonymous]
         public override PagedResult<ParkingLocation> GetList([FromQuery] ParkingLocationSearchObject searchObject)
         {
             return base.GetList(searchObject);
         }
 
-        [AllowAnonymous]
         public override ParkingLocation GetById(int id)
         {
             return base.GetById(id);
         }
 
-        [AllowAnonymous]
         [HttpGet("{id}/availability")]
         public ActionResult<List<SpotTypeAvailability>> GetAvailability(
             int id,
             [FromQuery] DateTime from,
             [FromQuery] DateTime to)
         {
-            if (from == default) from = DateTime.UtcNow.Date;
-            if (to == default || to <= from) to = from.AddDays(1);
             return Ok(_service.GetAvailability(id, from, to));
         }
 
+        // Public city lookup for unauthenticated clients (map/search bootstrap before login).
         [AllowAnonymous]
         [HttpGet("cities")]
         public ActionResult<List<CityCoordinate>> GetCities()
@@ -62,7 +58,11 @@ namespace EasyPark.API.Controllers
 
         [Authorize]
         [HttpGet("recommendations")]
-        public ActionResult<List<ParkingLocation>> GetRecommendations([FromQuery] int? cityId = null)
+        public ActionResult<List<ParkingLocation>> GetRecommendations(
+            [FromQuery] int? cityId = null,
+            [FromQuery] double? lat = null,
+            [FromQuery] double? lon = null,
+            [FromQuery] int count = 3)
         {
             var userIdClaim = User.FindFirst("UserId")?.Value 
                 ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -72,7 +72,7 @@ namespace EasyPark.API.Controllers
                 return Unauthorized("User not authenticated");
             }
 
-            var recommendations = _service.GetRecommendationScores(userId, cityId);
+            var recommendations = _service.GetRecommendationScores(userId, cityId, lat, lon, count);
             return Ok(recommendations);
         }
 
@@ -86,6 +86,12 @@ namespace EasyPark.API.Controllers
         public override ParkingLocation Update(int id, ParkingLocationUpdateRequest request)
         {
             return base.Update(id, request);
+        }
+
+        [Authorize(Roles = "Admin")]
+        public override IActionResult Delete(int id)
+        {
+            return base.Delete(id);
         }
     }
 }

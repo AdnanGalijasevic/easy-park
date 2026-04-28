@@ -1,5 +1,6 @@
 import 'package:easypark_mobile/providers/auth_provider.dart';
-import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
+import 'package:easypark_mobile/utils/input_validators.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -38,21 +39,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password has been reset. You can now sign in.'),
-          backgroundColor: EasyParkColors.success,
-        ),
-      );
+      AppFeedback.success('Password reset successful. You can now sign in.');
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: EasyParkColors.error,
-        ),
-      );
+      AppFeedback.error(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -113,13 +104,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'New password is required.';
-                    }
-                    if (value.length < 8) {
-                      return 'New password must contain at least 8 characters.';
-                    }
-                    return null;
+                    return InputValidators.passwordStrong(
+                      value,
+                      fieldName: 'New password',
+                    );
                   },
                 ),
                 const SizedBox(height: 16),

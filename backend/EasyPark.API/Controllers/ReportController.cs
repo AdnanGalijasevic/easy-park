@@ -56,15 +56,8 @@ namespace EasyPark.API.Controllers
             [FromQuery] int month,
             [FromQuery] bool graphsOnly = false)
         {
-            try
-            {
-                var pdf = _service.GenerateMonthlyAdminReportPdf(year, month, graphsOnly);
-                return File(pdf, "application/pdf", $"easypark-admin-report-{year:0000}-{month:00}.pdf");
-            }
-            catch (UserException ex)
-            {
-                return BadRequest(new { userError = ex.Message });
-            }
+            var pdf = _service.GenerateMonthlyAdminReportPdf(year, month, graphsOnly);
+            return File(pdf, "application/pdf", $"easypark-admin-report-{year:0000}-{month:00}.pdf");
         }
     }
 }

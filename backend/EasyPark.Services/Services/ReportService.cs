@@ -5,6 +5,7 @@ using System;
 using System.Linq;
 using System.Net;
 using EasyPark.Model;
+using EasyPark.Model.Constants;
 using EasyPark.Model.Models;
 using EasyPark.Model.Requests;
 using EasyPark.Model.SearchObjects;
@@ -87,7 +88,7 @@ namespace EasyPark.Services.Services
             }
 
             var reservations = Context.Reservations
-                .Where(r => r.Status == "Completed" &&
+                .Where(r => r.Status == ReservationStatus.Completed &&
                            r.StartTime >= request.PeriodStart &&
                            r.EndTime <= request.PeriodEnd);
 
@@ -98,7 +99,7 @@ namespace EasyPark.Services.Services
 
             var completedReservations = reservations.ToList();
             var transactions = Context.Transactions
-                .Where(t => t.Status == "Completed" &&
+                .Where(t => t.Status == TransactionStatus.Completed &&
                            t.CreatedAt >= request.PeriodStart &&
                            t.CreatedAt <= request.PeriodEnd);
 
@@ -185,24 +186,32 @@ namespace EasyPark.Services.Services
             var daysInMonth = DateTime.DaysInMonth(year, month);
 
             var monthRevenue = Context.Transactions.AsNoTracking()
-                .Where(t => t.Status == "Completed" && t.CreatedAt >= start && t.CreatedAt < end)
+                .Where(t => t.Status == TransactionStatus.Completed && t.CreatedAt >= start && t.CreatedAt < end)
                 .Sum(t => (decimal?)t.Amount) ?? 0m;
 
             var monthReservations = Context.Reservations.AsNoTracking()
-                .Count(r => r.Status == "Completed" && r.StartTime >= start && r.StartTime < end);
+                .Count(r => r.Status == ReservationStatus.Completed && r.StartTime >= start && r.StartTime < end);
 
-            var points = new List<DailyPoint>();
-            for (var d = 1; d <= daysInMonth; d++)
-            {
-                var dayStart = new DateTime(year, month, d, 0, 0, 0, DateTimeKind.Utc);
-                var dayEnd = dayStart.AddDays(1);
-                var rev = Context.Transactions.AsNoTracking()
-                    .Where(t => t.Status == "Completed" && t.CreatedAt >= dayStart && t.CreatedAt < dayEnd)
-                    .Sum(t => (decimal?)t.Amount) ?? 0m;
-                var res = Context.Reservations.AsNoTracking()
-                    .Count(r => r.Status == "Completed" && r.StartTime >= dayStart && r.StartTime < dayEnd);
-                points.Add(new DailyPoint { Day = d, Revenue = rev, Reservations = res });
-            }
+            var revenueByDay = Context.Transactions.AsNoTracking()
+                .Where(t => t.Status == TransactionStatus.Completed && t.CreatedAt >= start && t.CreatedAt < end)
+                .GroupBy(t => t.CreatedAt.Day)
+                .Select(g => new { Day = g.Key, Revenue = g.Sum(t => t.Amount) })
+                .ToDictionary(x => x.Day, x => x.Revenue);
+
+            var reservationsByDay = Context.Reservations.AsNoTracking()
+                .Where(r => r.Status == ReservationStatus.Completed && r.StartTime >= start && r.StartTime < end)
+                .GroupBy(r => r.StartTime.Day)
+                .Select(g => new { Day = g.Key, Count = g.Count() })
+                .ToDictionary(x => x.Day, x => x.Count);
+
+            var points = Enumerable.Range(1, daysInMonth)
+                .Select(day => new DailyPoint
+                {
+                    Day = day,
+                    Revenue = revenueByDay.TryGetValue(day, out var rev) ? rev : 0m,
+                    Reservations = reservationsByDay.TryGetValue(day, out var res) ? res : 0
+                })
+                .ToList();
 
             return AdminMonthlyReportPdfDocument.Generate(year, month, points, monthRevenue, monthReservations,
                 DateTime.UtcNow, graphsOnly);

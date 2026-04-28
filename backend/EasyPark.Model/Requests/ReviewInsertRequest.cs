@@ -1,10 +1,17 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace EasyPark.Model.Requests
 {
     public class ReviewInsertRequest
     {
+        [Required]
         public int ParkingLocationId { get; set; }
-        public int Rating { get; set; } // 1-5
+
+        [Required]
+        [Range(1, 5)]
+        public int Rating { get; set; }
+
+        [StringLength(1000)]
         public string? Comment { get; set; }
     }
 }
-

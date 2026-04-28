@@ -28,6 +28,7 @@ namespace EasyPark.Services.Database
         public virtual DbSet<Notification> Notifications { get; set; }
         public virtual DbSet<CityCoordinate> CityCoordinates { get; set; }
         public virtual DbSet<City> Cities { get; set; }
+        public virtual DbSet<RevokedToken> RevokedTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -44,6 +45,7 @@ namespace EasyPark.Services.Database
                 entity.Property(e => e.FirstName).HasMaxLength(50);
                 entity.Property(e => e.LastName).HasMaxLength(50);
                 entity.Property(e => e.Phone).HasMaxLength(20);
+                entity.Property(e => e.Coins).HasColumnType("decimal(10, 2)");
                 entity.Property(e => e.PasswordResetToken).HasMaxLength(64);
                 entity.Property(e => e.PasswordResetTokenExpiry).HasColumnType("datetime");
             });
@@ -85,6 +87,10 @@ namespace EasyPark.Services.Database
                 // TotalSpots removed from DB - calculated dynamically from ParkingSpots.Count
                 entity.Property(e => e.PricePerHour).HasColumnType("decimal(10, 2)").IsRequired();
                 entity.Property(e => e.PricePerDay).HasColumnType("decimal(10, 2)");
+                entity.Property(e => e.PriceRegular).HasColumnType("decimal(10, 2)");
+                entity.Property(e => e.PriceDisabled).HasColumnType("decimal(10, 2)");
+                entity.Property(e => e.PriceElectric).HasColumnType("decimal(10, 2)");
+                entity.Property(e => e.PriceCovered).HasColumnType("decimal(10, 2)");
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("(getdate())")
                     .HasColumnType("datetime");
@@ -338,6 +344,15 @@ namespace EasyPark.Services.Database
                 entity.Property(e => e.Latitude).HasColumnType("decimal(10, 8)").IsRequired();
                 entity.Property(e => e.Longitude).HasColumnType("decimal(11, 8)").IsRequired();
                 entity.HasIndex(e => e.City).IsUnique();
+            });
+
+            modelBuilder.Entity<RevokedToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Jti).HasMaxLength(128).IsRequired();
+                entity.HasIndex(e => e.Jti).IsUnique();
+                entity.Property(e => e.RevokedAt).HasColumnType("datetime").IsRequired();
+                entity.Property(e => e.ExpiresAt).HasColumnType("datetime").IsRequired();
             });
 
             OnModelCreatingPartial(modelBuilder);

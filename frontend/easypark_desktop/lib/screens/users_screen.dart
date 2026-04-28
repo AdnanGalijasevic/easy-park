@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:easypark_desktop/models/user_model.dart';
 import 'package:easypark_desktop/providers/user_provider.dart';
 import 'package:easypark_desktop/providers/base_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -15,9 +17,12 @@ class UsersScreen extends StatefulWidget {
 
 class _UsersScreenState extends State<UsersScreen> {
   final UserProvider _userProvider = UserProvider();
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
   List<User> _users = [];
   bool _isLoading = true;
   bool? _activeFilter;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -28,7 +33,13 @@ class _UsersScreenState extends State<UsersScreen> {
   Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
     try {
-      final filter = _activeFilter != null ? {'isActive': _activeFilter} : null;
+      final filter = <String, dynamic>{};
+      if (_activeFilter != null) {
+        filter['isActive'] = _activeFilter;
+      }
+      if (_searchQuery.trim().isNotEmpty) {
+        filter['fts'] = _searchQuery.trim();
+      }
       final result = await _userProvider.get(filter: filter);
       if (mounted) {
         setState(() {
@@ -41,20 +52,24 @@ class _UsersScreenState extends State<UsersScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error loading users: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load users: ${normalizeErrorMessage(e)}'),
+          ),
+        );
       }
     }
   }
 
   Future<void> _toggleActive(User user) async {
     try {
-      final url = '${BaseProvider.baseUrl}User/toggle-active';
+      final url = '${BaseProvider.baseUrl}User/${user.id}/status';
       final uri = Uri.parse(url);
       final headers = _userProvider.createHeaders();
-      final response = await http.post(
+      final response = await http.patch(
         uri,
         headers: headers,
-        body: jsonEncode({'userId': user.id}),
+        body: jsonEncode({'isActive': !user.isActive}),
       );
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await _loadUsers();
@@ -70,14 +85,47 @@ class _UsersScreenState extends State<UsersScreen> {
             ),
           );
         }
+        return;
       }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(httpFailureMessage(
+            action: 'User status update',
+            statusCode: response.statusCode,
+            body: response.body,
+          )),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to update user status: ${normalizeErrorMessage(e)}',
+            ),
+          ),
+        );
       }
     }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _searchQuery = value.trim());
+      _loadUsers();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -86,6 +134,53 @@ class _UsersScreenState extends State<UsersScreen> {
       appBar: AppBar(
         title: const Text('Users'),
         actions: [
+          SizedBox(
+            width: 280,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: EasyParkColors.onAccent),
+                decoration: InputDecoration(
+                  hintText: 'Search name/username/email...',
+                  hintStyle: const TextStyle(color: EasyParkColors.onAccent),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: EasyParkColors.onAccent,
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.clear,
+                            color: EasyParkColors.onAccent,
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                            _loadUsers();
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: EasyParkColors.accent,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 0,
+                  ),
+                ),
+                onSubmitted: (value) {
+                  setState(() => _searchQuery = value);
+                  _loadUsers();
+                },
+                onChanged: _onSearchChanged,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),

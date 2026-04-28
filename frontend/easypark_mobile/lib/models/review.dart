@@ -21,6 +21,13 @@ class Review {
     this.updatedAt,
   });
 
+  static DateTime _parseLocal(String s) {
+    final hasTimezone =
+        s.endsWith('Z') || RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(s);
+    final normalized = hasTimezone ? s : '${s}Z';
+    return DateTime.parse(normalized).toLocal();
+  }
+
   factory Review.fromJson(Map<String, dynamic> json) {
     return Review(
       id: (json['id'] as num).toInt(),
@@ -31,10 +38,10 @@ class Review {
       rating: (json['rating'] as num).toInt(),
       comment: json['comment'] as String?,
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+          ? _parseLocal(json['createdAt'] as String)
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+          ? _parseLocal(json['updatedAt'] as String)
           : null,
     );
   }

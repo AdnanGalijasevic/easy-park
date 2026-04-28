@@ -20,6 +20,8 @@ class ParkingLocation {
   final bool hasDisabledSpots;
   final bool hasElectricCharging;
   final bool hasCoveredSpots;
+  final bool is24Hours;
+  final String? operatingHours;
   final List<ParkingSpot>? parkingSpots;
   final double? cbfScore;
   final String? cbfExplanation;
@@ -44,6 +46,8 @@ class ParkingLocation {
     required this.hasDisabledSpots,
     required this.hasElectricCharging,
     required this.hasCoveredSpots,
+    this.is24Hours = true,
+    this.operatingHours,
     this.parkingSpots,
     this.cbfScore,
     this.cbfExplanation,
@@ -73,6 +77,8 @@ class ParkingLocation {
       hasDisabledSpots: json['hasDisabledSpots'] as bool? ?? false,
       hasElectricCharging: json['hasElectricCharging'] as bool? ?? false,
       hasCoveredSpots: json['hasCoveredSpots'] as bool? ?? false,
+      is24Hours: json['is24Hours'] as bool? ?? true,
+      operatingHours: json['operatingHours'] as String?,
       parkingSpots: _parseSpots(json),
       cbfScore: (json['cbfScore'] as num?)?.toDouble(),
       cbfExplanation: json['cbfExplanation'] as String?,
@@ -111,6 +117,8 @@ class ParkingLocation {
       'hasDisabledSpots': hasDisabledSpots,
       'hasElectricCharging': hasElectricCharging,
       'hasCoveredSpots': hasCoveredSpots,
+      'is24Hours': is24Hours,
+      'operatingHours': operatingHours,
       'parkingSpots': parkingSpots?.map((e) => e.toJson()).toList(),
       'cbfScore': cbfScore,
       'cbfExplanation': cbfExplanation,

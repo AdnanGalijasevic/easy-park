@@ -1,23 +1,26 @@
 import 'dart:ui_web' as ui_web;
 import 'dart:js_interop';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 import 'package:easypark_mobile/utils/constants.dart';
+import 'package:easypark_mobile/widgets/payment_dialog_result.dart';
 
 @JS('JSON.stringify')
 external String? _jsStringify(JSAny? value);
 
-Future<bool> showStripePaymentDialog(
+Future<StripePaymentResult> showStripePaymentDialog(
   BuildContext context, {
   required String token,
   required int amount,
 }) async {
-  final viewId = 'stripe-payment-iframe-${DateTime.now().millisecondsSinceEpoch}';
-  final src = '${AppConstants.baseUrl}/Transaction/payment-form?amount=$amount&token=${Uri.encodeComponent(token)}';
+  final viewId =
+      'stripe-payment-iframe-${DateTime.now().millisecondsSinceEpoch}';
+  final src =
+      '${AppConstants.baseUrl}/Transaction/payment-form?amount=$amount&token=${Uri.encodeComponent(token)}';
 
   final completer = _PaymentCompleter();
 
-  // Register iframe element factory.
   ui_web.platformViewRegistry.registerViewFactory(viewId, (int id) {
     final iframe = web.HTMLIFrameElement()
       ..src = src
@@ -27,16 +30,61 @@ Future<bool> showStripePaymentDialog(
     return iframe;
   });
 
-  // Listen for postMessage from iframe.
   void onMessage(web.MessageEvent event) {
     try {
       final data = event.data;
       if (data == null) return;
       final jsonStr = _jsStringify(data);
       if (jsonStr == null) return;
-      // Simple string check — avoids dart:convert dependency in this file.
-      if (jsonStr.contains('"STRIPE_PAYMENT_SUCCESS"')) {
-        completer.complete(true);
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is! Map<String, dynamic>) return;
+
+      final eventName = (decoded['event'] ?? '').toString().toUpperCase();
+      final rawMessage = decoded['message']?.toString().trim();
+      final message = (rawMessage == null || rawMessage.isEmpty)
+          ? null
+          : rawMessage;
+
+      if (eventName == 'STRIPE_PAYMENT_SUCCESS') {
+        completer.complete(
+          StripePaymentResult(
+            status: StripePaymentStatus.paid,
+            message: message,
+          ),
+        );
+        return;
+      }
+
+      if (eventName == 'STRIPE_PAYMENT_ALREADY_PAID') {
+        completer.complete(
+          StripePaymentResult(
+            status: StripePaymentStatus.alreadyPaid,
+            message:
+                message ?? 'This payment was already completed earlier.',
+          ),
+        );
+        return;
+      }
+
+      if (eventName == 'STRIPE_PAYMENT_CANCELLED') {
+        completer.complete(
+          StripePaymentResult(
+            status: StripePaymentStatus.cancelled,
+            message:
+                message ??
+                'Payment was cancelled. Your balance remains unchanged.',
+          ),
+        );
+        return;
+      }
+
+      if (eventName == 'STRIPE_PAYMENT_FAILED') {
+        completer.complete(
+          StripePaymentResult(
+            status: StripePaymentStatus.failed,
+            message: message ?? 'Payment failed. No coins were charged.',
+          ),
+        );
       }
     } catch (_) {}
   }
@@ -44,29 +92,36 @@ Future<bool> showStripePaymentDialog(
   final listener = onMessage.toJS;
   web.window.addEventListener('message', listener);
 
-  final result = await showDialog<bool>(
+  final result = await showDialog<StripePaymentResult>(
     context: context,
     barrierDismissible: true,
-    builder: (ctx) => _PaymentFormDialog(
-      viewId: viewId,
-      completer: completer,
-    ),
+    builder: (ctx) => _PaymentFormDialog(viewId: viewId, completer: completer),
   );
 
   web.window.removeEventListener('message', listener);
-  return result ?? false;
+  return result ??
+      const StripePaymentResult(
+        status: StripePaymentStatus.cancelled,
+        message: 'Payment dialog was closed before completion.',
+      );
 }
 
 class _PaymentCompleter {
   bool _completed = false;
   bool get isCompleted => _completed;
   VoidCallback? _onComplete;
+  StripePaymentResult _result = const StripePaymentResult(
+    status: StripePaymentStatus.cancelled,
+  );
 
-  void complete(bool success) {
+  void complete(StripePaymentResult result) {
     if (_completed) return;
     _completed = true;
+    _result = result;
     _onComplete?.call();
   }
+
+  StripePaymentResult get result => _result;
 
   void onComplete(VoidCallback cb) {
     _onComplete = cb;
@@ -89,7 +144,7 @@ class _PaymentFormDialogState extends State<_PaymentFormDialog> {
   void initState() {
     super.initState();
     widget.completer.onComplete(() {
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(widget.completer.result);
     });
   }
 
@@ -115,11 +170,20 @@ class _PaymentFormDialogState extends State<_PaymentFormDialog> {
                 children: [
                   const Text(
                     'Top Up Coins',
-                    style: TextStyle(color: Color(0xFF86B94E), fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(
+                      color: Color(0xFF86B94E),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white54),
-                    onPressed: () => Navigator.of(context).pop(false),
+                    onPressed: () => Navigator.of(context).pop(
+                      const StripePaymentResult(
+                        status: StripePaymentStatus.cancelled,
+                        message: 'Payment dialog was closed.',
+                      ),
+                    ),
                   ),
                 ],
               ),

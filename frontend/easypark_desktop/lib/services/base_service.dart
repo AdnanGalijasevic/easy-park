@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'package:easypark_desktop/models/search_result.dart';
 import 'package:easypark_desktop/providers/auth_provider.dart';
+import 'package:easypark_desktop/utils/api_error_parser.dart';
 import 'package:http/http.dart' as http;
 
-/// Base service class — handles all raw HTTP communication.
-/// Providers depend on this; they hold state and call service methods.
 abstract class BaseService<T> {
   static String get baseUrl {
     final url = const String.fromEnvironment(
-      'baseUrl',
+      'API_BASE',
       defaultValue: 'http://localhost:8080/',
     );
     return url;
@@ -31,23 +30,8 @@ abstract class BaseService<T> {
     };
   }
 
-  /// Parse error message from ExceptionFilter response format.
   String _parseError(http.Response response, String fallback) {
-    try {
-      final data = jsonDecode(response.body);
-      if (data is Map<String, dynamic>) {
-        final errors = data['errors'];
-        if (errors is Map<String, dynamic>) {
-          final userErrors = errors['userError'];
-          if (userErrors is List && userErrors.isNotEmpty) {
-            return userErrors.first.toString();
-          }
-        }
-        final msg = data['message'] ?? data['error'];
-        if (msg != null) return msg.toString();
-      }
-    } catch (_) {}
-    return fallback;
+    return extractApiErrorMessage(response.body) ?? fallback;
   }
 
   Future<http.Response> _executeWithAuthRetry(

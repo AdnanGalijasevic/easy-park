@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:easypark_desktop/models/city_coordinate_model.dart';
 import 'package:easypark_desktop/models/parking_location_model.dart';
 import 'package:easypark_desktop/providers/parking_location_provider.dart';
 import 'package:easypark_desktop/screens/master_screen.dart';
 import 'package:easypark_desktop/screens/parking_location_wizard.dart';
 import 'package:easypark_desktop/screens/parking_dashboard_screen.dart';
 import 'package:easypark_desktop/app_colors.dart';
-import 'package:easypark_desktop/utils/constants.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class ParkingLocationsScreen extends StatefulWidget {
   const ParkingLocationsScreen({super.key});
@@ -19,16 +20,30 @@ class ParkingLocationsScreen extends StatefulWidget {
 class _ParkingLocationsScreenState extends State<ParkingLocationsScreen> {
   late ParkingLocationProvider _parkingLocationProvider;
 
-  // Data for the table
   List<ParkingLocation> _locations = [];
+  List<CityCoordinate> _cities = [];
   bool _isLoading = true;
-  String? _selectedCity = 'Mostar'; // Default filter
+  String? _selectedCity;
 
   @override
   void initState() {
     super.initState();
     _parkingLocationProvider = ParkingLocationProvider();
+    _loadCities();
     _loadLocations();
+  }
+
+  Future<void> _loadCities() async {
+    try {
+      var cities = await _parkingLocationProvider.getCities();
+      if (mounted) {
+        setState(() {
+          _cities = cities;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading cities: $e');
+    }
   }
 
   Future<void> _loadLocations() async {
@@ -50,7 +65,13 @@ class _ParkingLocationsScreenState extends State<ParkingLocationsScreen> {
         });
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error loading locations: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to load parking locations: ${normalizeErrorMessage(e)}',
+            ),
+          ),
+        );
       }
     }
   }
@@ -104,7 +125,11 @@ class _ParkingLocationsScreenState extends State<ParkingLocationsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
+        SnackBar(
+          content: Text(
+            'Failed to delete "${location.name}": ${normalizeErrorMessage(e)}',
+          ),
+        ),
       );
     }
   }
@@ -136,7 +161,6 @@ class _ParkingLocationsScreenState extends State<ParkingLocationsScreen> {
       appBar: AppBar(
         title: const Text('Parking Locations'),
         actions: [
-          // City Filter Dropdown
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
@@ -162,11 +186,11 @@ class _ParkingLocationsScreenState extends State<ParkingLocationsScreen> {
                       style: TextStyle(color: EasyParkColors.onAccent),
                     ),
                   ),
-                  ...citiesBiH.map((city) {
+                  ..._cities.map((city) {
                     return DropdownMenuItem(
-                      value: city,
+                      value: city.city,
                       child: Text(
-                        city,
+                        city.city,
                         style: const TextStyle(color: EasyParkColors.onAccent),
                       ),
                     );

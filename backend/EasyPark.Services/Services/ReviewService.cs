@@ -13,6 +13,7 @@ using EasyPark.Services.Helpers;
 using EasyPark.Services.Interfaces;
 using ReviewModel = EasyPark.Model.Models.Review;
 using ReviewDb = EasyPark.Services.Database.Review;
+using ReservationDb = EasyPark.Services.Database.Reservation;
 
 namespace EasyPark.Services.Services
 {
@@ -33,9 +34,19 @@ namespace EasyPark.Services.Services
                 .Include(r => r.User)
                 .Include(r => r.ParkingLocation);
 
-            if (search.UserId.HasValue)
+            var isAdmin = CurrentUserHelper.IsAdmin(_httpContextAccessor);
+            var currentUserId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
+
+            if (isAdmin)
             {
-                filteredQuery = filteredQuery.Where(r => r.UserId == search.UserId.Value);
+                if (search.UserId.HasValue)
+                {
+                    filteredQuery = filteredQuery.Where(r => r.UserId == search.UserId.Value);
+                }
+            }
+            else if (search.UserId.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(r => r.UserId == currentUserId);
             }
 
             if (search.ParkingLocationId.HasValue)
@@ -84,6 +95,15 @@ namespace EasyPark.Services.Services
             {
                 throw new UserException("You have already reviewed this parking location", HttpStatusCode.BadRequest);
             }
+
+            var hasCompleted = Context.Set<ReservationDb>()
+                .Include(r => r.ParkingSpot)
+                .Any(r => r.UserId == userId
+                       && r.ParkingSpot.ParkingLocationId == request.ParkingLocationId
+                       && r.Status == "Completed");
+
+            if (!hasCompleted)
+                throw new BusinessException("You must complete a reservation before reviewing this location.");
 
             entity.UserId = userId;
             entity.CreatedAt = DateTime.UtcNow;

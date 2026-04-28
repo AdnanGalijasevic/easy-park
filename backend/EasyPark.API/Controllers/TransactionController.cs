@@ -9,7 +9,6 @@ using Microsoft.Extensions.Configuration;
 using Stripe;
 using System;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace EasyPark.API.Controllers
@@ -73,7 +72,7 @@ namespace EasyPark.API.Controllers
         }
 
         [HttpPost("buy-coins")]
-        public Stripe.PaymentIntent BuyCoins([FromQuery] int amount)
+        public StripePaymentResult BuyCoins([FromQuery] int amount)
         {
             return _service.CreatePaymentIntent(amount);
         }
@@ -90,17 +89,26 @@ namespace EasyPark.API.Controllers
             return _service.CompletePurchase(paymentIntentId);
         }
 
+        [HttpPost("cancel-pending-coin-payments")]
+        public IActionResult CancelPendingCoinPayments()
+        {
+            var cancelledCount = _service.CancelPendingCoinPayments();
+            return Ok(new { cancelledCount });
+        }
+
         /// <summary>
         /// Returns a self-contained HTML page with embedded Stripe Elements card form.
         /// The page creates a PaymentIntent, collects card details via Stripe.js, confirms payment,
         /// then calls complete-purchase and posts a postMessage to the parent Flutter frame.
         /// </summary>
         [HttpGet("payment-form")]
-        [AllowAnonymous]
-        public ContentResult GetPaymentForm([FromQuery] int amount, [FromQuery] string? token)
+        public ContentResult GetPaymentForm([FromQuery] int amount, [FromQuery] string? token = null)
         {
             if (amount <= 0)
                 return new ContentResult { StatusCode = 400, Content = "Amount must be > 0" };
+
+            if (string.IsNullOrWhiteSpace(token))
+                return new ContentResult { StatusCode = 400, Content = "Authorization token is required." };
 
             var publishableKey = Environment.GetEnvironmentVariable("_stripePublishableKey");
             if (string.IsNullOrWhiteSpace(publishableKey))
@@ -117,21 +125,7 @@ namespace EasyPark.API.Controllers
                 };
             }
 
-            // Decode userId from the JWT token passed as query param (endpoint is AllowAnonymous).
-            int userId = 0;
-            if (!string.IsNullOrWhiteSpace(token))
-            {
-                try
-                {
-                    var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-                    var jwt = handler.ReadJwtToken(token);
-                    var sidClaim = jwt.Claims.FirstOrDefault(c => c.Type == "nameid" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                    if (sidClaim != null) int.TryParse(sidClaim, out userId);
-                }
-                catch { /* invalid token — userId stays 0, CreatePaymentIntentForForm will throw */ }
-            }
-
-            var intent = _service.CreatePaymentIntentForForm(amount, userId);
+            var intent = _service.CreatePaymentIntentForForm(amount);
             var clientSecret = intent.ClientSecret;
             var backendOrigin = $"{Request.Scheme}://{Request.Host}";
 
@@ -180,6 +174,7 @@ namespace EasyPark.API.Controllers
 </div>
 <script>
 const stripe = Stripe('{publishableKey}');
+const authToken = '{token}';
 const elements = stripe.elements({{ clientSecret: '{clientSecret}', appearance: {{ theme: 'night', variables: {{ colorPrimary: '#F47920' }} }} }});
 const paymentElement = elements.create('payment');
 paymentElement.mount('#payment-element');
@@ -187,7 +182,6 @@ paymentElement.mount('#payment-element');
 const form = document.getElementById('payment-form');
 const submitBtn = document.getElementById('submit');
 const errorMsg = document.getElementById('error-msg');
-const authToken = new URLSearchParams(window.location.search).get('token') || '';
 paymentElement.on('loaderror', (ev) => {{
   const msg = ev?.error?.message || 'Payment form failed to load.';
   errorMsg.textContent = msg + ' Check that Stripe secret key and publishable key belong to same Stripe account.';
@@ -211,24 +205,22 @@ form.addEventListener('submit', async (e) => {{
     return;
   }}
 
-  // Payment confirmed by Stripe.js — now call backend to record coins
   const paymentIntentId = result.paymentIntent.id;
   try {{
-    const headers = authToken ? {{ 'Authorization': 'Bearer ' + authToken }} : {{}};
     const resp = await fetch('{backendOrigin}/Transaction/complete-purchase?paymentIntentId=' + paymentIntentId, {{
       method: 'POST',
-      headers
+      headers: {{
+        'Authorization': 'Bearer ' + authToken
+      }}
     }});
     if (!resp.ok) throw new Error('Backend error ' + resp.status);
   }} catch(err) {{
     console.warn('complete-purchase failed:', err);
-    // Still notify parent — backend can be retried via refresh
   }}
 
   document.getElementById('payment-form').style.display = 'none';
   document.getElementById('success-view').style.display = 'block';
 
-  // Notify parent Flutter frame
   const msg = {{ type: 'STRIPE_PAYMENT_SUCCESS', paymentIntentId, coinsAmount: {amount} }};
   if (window.parent && window.parent !== window) {{
     window.parent.postMessage(msg, '*');
@@ -246,6 +238,7 @@ form.addEventListener('submit', async (e) => {{
             };
         }
 
+        // Stripe webhook must be public because Stripe does not send user JWT; signature is verified server-side.
         [AllowAnonymous]
         [HttpPost("stripe-webhook")]
         public async Task<IActionResult> StripeWebhook()
@@ -270,17 +263,26 @@ form.addEventListener('submit', async (e) => {{
                 return BadRequest();
             }
 
-            if (stripeEvent.Type == "checkout.session.completed")
+            switch (stripeEvent.Type)
             {
-                if (stripeEvent.Data.Object is Stripe.Checkout.Session checkoutSession && !string.IsNullOrWhiteSpace(checkoutSession.Id))
-                {
-                    _service.CompletePurchaseByCheckoutSession(checkoutSession.Id);
-                }
+                case "checkout.session.completed":
+                    if (stripeEvent.Data.Object is Stripe.Checkout.Session checkoutSession && !string.IsNullOrWhiteSpace(checkoutSession.Id))
+                    {
+                        _service.CompletePurchaseByCheckoutSession(checkoutSession.Id);
+                    }
+                    break;
+
+                case "payment_intent.succeeded":
+                    var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
+                    if (paymentIntent != null)
+                        _service.CompletePurchaseByPaymentIntentId(paymentIntent.Id);
+                    break;
             }
 
             return Ok();
         }
 
+        // Public callback endpoint used by Stripe/browser redirect after checkout completion.
         [AllowAnonymous]
         [HttpGet("success")]
         public ContentResult Success([FromQuery] string? session_id)
@@ -349,6 +351,7 @@ form.addEventListener('submit', async (e) => {{
             };
         }
 
+        // Public callback endpoint used by Stripe/browser redirect when checkout is cancelled.
         [AllowAnonymous]
         [HttpGet("cancel")]
         public ContentResult Cancel()

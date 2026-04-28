@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 using System.Net;
 using EasyPark.Model;
+using EasyPark.Model.Constants;
 using EasyPark.Model.Models;
 using EasyPark.Model.Requests;
 using EasyPark.Model.SearchObjects;
@@ -74,21 +75,18 @@ namespace EasyPark.Services.Services
                 throw new UserException("Spot type is required", HttpStatusCode.BadRequest);
             }
 
-            // Validacija tipa spot-a
             var validSpotTypes = new[] { "Regular", "Disabled", "Electric", "Covered" };
             if (!validSpotTypes.Contains(request.SpotType))
             {
                 throw new UserException($"Invalid spot type. Valid types are: {string.Join(", ", validSpotTypes)}", HttpStatusCode.BadRequest);
             }
 
-            // Proveri da li parking location postoji
             var parkingLocation = Context.ParkingLocations.Find(request.ParkingLocationId);
             if (parkingLocation == null)
             {
                 throw new UserException("Parking location not found", HttpStatusCode.NotFound);
             }
 
-            // Proveri da li spot number već postoji u toj lokaciji
             var existingSpot = Context.ParkingSpots
                 .FirstOrDefault(ps => ps.ParkingLocationId == request.ParkingLocationId && 
                                       ps.SpotNumber == request.SpotNumber);
@@ -189,7 +187,7 @@ namespace EasyPark.Services.Services
             {
                 var dbSpot = list.First(s => s.Id == item.Id);
                 var nextRes = dbSpot.Reservations
-                    .Where(r => r.StartTime >= DateTime.UtcNow && r.Status != "Cancelled")
+                    .Where(r => r.StartTime >= DateTime.UtcNow && r.Status != ReservationStatus.Cancelled)
                     .OrderBy(r => r.StartTime)
                     .FirstOrDefault();
                 if (nextRes != null)

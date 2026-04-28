@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
+import 'package:easypark_mobile/widgets/payment_dialog_result.dart';
 
-Future<bool> showStripePaymentDialog(
+Future<StripePaymentResult> showStripePaymentDialog(
   BuildContext context, {
   required String token,
   required int amount,
 }) async {
-  // Non-web fallback: not supported.
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Embedded payment not supported on this platform.')),
+  AppFeedback.info(
+    'Embedded payment unavailable on this platform. Use Android, iOS, or Web checkout.',
   );
-  return false;
+  return const StripePaymentResult(
+    status: StripePaymentStatus.failed,
+    message:
+        'Embedded payment is unavailable on this platform. Use Android, iOS, or Web checkout.',
+  );
 }

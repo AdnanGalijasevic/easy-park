@@ -5,6 +5,8 @@ import 'package:easypark_mobile/screens/forgot_password_screen.dart';
 import 'package:easypark_mobile/screens/register_screen.dart';
 import 'package:easypark_mobile/screens/reset_password_screen.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
+import 'package:easypark_mobile/utils/input_validators.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,12 +28,9 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         listen: false,
       ).login(_usernameController.text, _passwordController.text);
-      // Navigation handled by main via Auth State
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      AppFeedback.error(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -82,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) =>
-                      v == null || v.trim().isEmpty ? "Username is required." : null,
+                      InputValidators.requiredText(v, 'Username'),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -94,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   obscureText: true,
                   validator: (v) =>
-                      v == null || v.isEmpty ? "Password is required." : null,
+                      InputValidators.requiredText(v, 'Password'),
                 ),
                 const SizedBox(height: 8),
                 Align(

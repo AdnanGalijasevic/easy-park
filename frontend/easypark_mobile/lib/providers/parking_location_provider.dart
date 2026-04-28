@@ -6,6 +6,16 @@ import 'package:easypark_mobile/services/parking_location_service.dart';
 class ParkingLocationProvider extends BaseProvider<ParkingLocation> {
   ParkingLocationProvider() : super(ParkingLocationService());
 
+  /// Home map city dropdown — lives in provider so it survives tab switches (Home dispose).
+  String _homeMapCity = 'Mostar';
+  String get homeMapCity => _homeMapCity;
+
+  void setHomeMapCity(String city) {
+    if (_homeMapCity == city) return;
+    _homeMapCity = city;
+    notifyListeners();
+  }
+
   ParkingLocation? _selectedLocation;
   ParkingLocation? get selectedLocation => _selectedLocation;
 
@@ -30,12 +40,14 @@ class ParkingLocationProvider extends BaseProvider<ParkingLocation> {
   List<ParkingLocation> get sortedItems {
     if (!_sortByRecommendation) return items;
     
-    // User requested to ONLY see the 3 recommended locations when filter is active
     return _recommendedLocations;
   }
 
   void selectLocation(ParkingLocation? location) {
     _selectedLocation = location;
+    if (location != null) {
+      _homeMapCity = location.city;
+    }
     notifyListeners();
   }
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:easypark_mobile/models/reservation.dart';
 import 'package:easypark_mobile/providers/reservation_provider.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
 
 class ReservationsScreen extends StatefulWidget {
   const ReservationsScreen({super.key});
@@ -13,6 +15,8 @@ class ReservationsScreen extends StatefulWidget {
 
 class _ReservationsScreenState extends State<ReservationsScreen>
     with SingleTickerProviderStateMixin {
+  static const String _cancellationUnavailableMessage =
+      'Cancellation is no longer available for this reservation.';
   late TabController _tabController;
 
   @override
@@ -66,21 +70,13 @@ class _ReservationsScreenState extends State<ReservationsScreen>
           listen: false,
         ).cancelReservation(reservation.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Reservation cancelled'),
-              backgroundColor: EasyParkColors.accent,
-            ),
+          AppFeedback.info(
+            'Reservation at ${reservation.parkingLocationName} was cancelled.',
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceFirst('Exception: ', '')),
-              backgroundColor: EasyParkColors.error,
-            ),
-          );
+          AppFeedback.error(e.toString().replaceFirst('Exception: ', ''));
         }
       }
     }
@@ -91,32 +87,45 @@ class _ReservationsScreenState extends State<ReservationsScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('QR Code — ${reservation.parkingLocationName}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: EasyParkColors.borderLight),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                reservation.qrCode ?? 'No QR Code',
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                  letterSpacing: 2,
+        // AlertDialog asks for intrinsics; QrImageView uses LayoutBuilder → need bounded width.
+        content: SizedBox(
+          width: 280,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: EasyParkColors.borderLight),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: reservation.qrCode != null && reservation.qrCode!.isNotEmpty
+                    ? Center(
+                        child: SizedBox(
+                          width: 220,
+                          height: 220,
+                          child: QrImageView(
+                            data: reservation.qrCode!,
+                            version: QrVersions.auto,
+                            size: 220,
+                            backgroundColor: Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Text(
+                        'No QR Code',
+                        style: TextStyle(color: EasyParkColors.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Show this code at the parking entrance',
+                style: TextStyle(color: EasyParkColors.textSecondary, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Show this code at the parking entrance',
-              style: TextStyle(color: EasyParkColors.textSecondary, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -280,7 +289,6 @@ class _ReservationCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -315,7 +323,6 @@ class _ReservationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            // Spot info
             Row(
               children: [
                 const Icon(Icons.local_parking, size: 16, color: EasyParkColors.muted),
@@ -327,7 +334,6 @@ class _ReservationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            // Time range
             Row(
               children: [
                 const Icon(Icons.access_time, size: 16, color: EasyParkColors.muted),
@@ -341,49 +347,89 @@ class _ReservationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            // Price row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '\$${reservation.totalPrice.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: EasyParkColors.success,
-                  ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.stars,
+                      size: 18,
+                      color: EasyParkColors.highlightBorder,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${reservation.totalPrice.toStringAsFixed(2)} Coins',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: EasyParkColors.success,
+                      ),
+                    ),
+                  ],
                 ),
                 if (isActive)
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      if (reservation.qrCode != null) ...[
-                        OutlinedButton.icon(
-                          onPressed: onShowQr,
-                          icon: const Icon(Icons.qr_code, size: 16),
-                          label: const Text('QR'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
+                      Row(
+                        children: [
+                          if (reservation.qrCode != null) ...[
+                            OutlinedButton.icon(
+                              onPressed: onShowQr,
+                              icon: const Icon(Icons.qr_code, size: 16),
+                              label: const Text('QR'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
                             ),
-                            visualDensity: VisualDensity.compact,
+                            const SizedBox(width: 8),
+                          ],
+                          Tooltip(
+                            message: reservation.cancellationAllowed
+                                ? 'Cancel reservation'
+                                : (reservation.cancellationReason ??
+                                      _ReservationsScreenState
+                                          ._cancellationUnavailableMessage),
+                            child: ElevatedButton.icon(
+                              onPressed: reservation.cancellationAllowed
+                                  ? onCancel
+                                  : null,
+                              icon: const Icon(Icons.cancel, size: 16),
+                              label: const Text('Cancel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: EasyParkColors.error,
+                                foregroundColor: EasyParkColors.onAccent,
+                                disabledBackgroundColor:
+                                    EasyParkColors.surfaceElevated,
+                                disabledForegroundColor:
+                                    EasyParkColors.onBackgroundMuted,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (reservation.cancellationAllowed)
-                        ElevatedButton.icon(
-                          onPressed: onCancel,
-                          icon: const Icon(Icons.cancel, size: 16),
-                          label: const Text('Cancel'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: EasyParkColors.error,
-                            foregroundColor: EasyParkColors.onAccent,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
+                        ],
+                      ),
+                      if (!reservation.cancellationAllowed)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            reservation.cancellationReason ??
+                                _ReservationsScreenState
+                                    ._cancellationUnavailableMessage,
+                            style: const TextStyle(
+                              color: EasyParkColors.onBackgroundMuted,
+                              fontSize: 11,
                             ),
-                            visualDensity: VisualDensity.compact,
+                            textAlign: TextAlign.right,
                           ),
                         ),
                     ],

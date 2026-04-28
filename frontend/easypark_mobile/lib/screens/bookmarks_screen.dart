@@ -4,6 +4,7 @@ import 'package:easypark_mobile/models/bookmark.dart';
 import 'package:easypark_mobile/providers/bookmark_provider.dart';
 import 'package:easypark_mobile/providers/shell_navigation_provider.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
 
 class BookmarksScreen extends StatefulWidget {
   const BookmarksScreen({super.key});
@@ -48,14 +49,12 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
           context,
           listen: false,
         ).removeBookmark(bookmark.id);
+        AppFeedback.success(
+          '"${bookmark.parkingLocationName}" removed from bookmarks.',
+        );
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceFirst('Exception: ', '')),
-              backgroundColor: EasyParkColors.error,
-            ),
-          );
+          AppFeedback.error(e.toString().replaceFirst('Exception: ', ''));
         }
       }
     }

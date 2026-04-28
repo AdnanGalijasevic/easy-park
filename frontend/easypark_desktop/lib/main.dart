@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:easypark_desktop/screens/forgot_password_screen.dart';
 import 'package:easypark_desktop/screens/master_screen.dart';
 import 'package:easypark_desktop/utils/utils.dart';
 import 'package:easypark_desktop/providers/auth_provider.dart';
@@ -47,6 +48,10 @@ class _AuthBootstrapState extends State<_AuthBootstrap> {
 
     final user = AuthProvider.username;
     if (user == null || AuthProvider.accessToken == null) return false;
+    if (!AuthProvider.hasAdminRoleInAccessToken()) {
+      await AuthProvider.clearCredentials();
+      return false;
+    }
     return true;
   }
 
@@ -93,10 +98,18 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _userProvider.login(
+      final loggedUser = await _userProvider.login(
         _usernameController.text.trim(),
         _passwordController.text.trim(),
       );
+
+      final isAdmin =
+          loggedUser.roles.any((r) => r.toLowerCase() == 'admin') ||
+          AuthProvider.hasAdminRoleInAccessToken();
+      if (!isAdmin) {
+        await AuthProvider.clearCredentials();
+        throw Exception('Access denied. Desktop app is available to admins only.');
+      }
 
       if (!mounted) return;
 
@@ -109,6 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } on Exception catch (e) {
+      final message = e.toString().replaceFirst('Exception: ', '');
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -119,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: const Text('Ok'),
             ),
           ],
-          content: Text(e.toString()),
+          content: Text(message),
         ),
       );
     }
@@ -298,6 +312,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const ForgotPasswordScreen(),
+                                  ),
+                                );
+                              },
+                        child: const Text('Forgot password?'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),

@@ -11,10 +11,17 @@ class TimeSlot {
 
   bool get isBusy => availableSpots == 0;
 
+  static DateTime _parseLocal(String s) {
+    final hasTimezone =
+        s.endsWith('Z') || RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(s);
+    final normalized = hasTimezone ? s : '${s}Z';
+    return DateTime.parse(normalized).toLocal();
+  }
+
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
     return TimeSlot(
-      start: DateTime.parse(json['start'] as String).toLocal(),
-      end: DateTime.parse(json['end'] as String).toLocal(),
+      start: _parseLocal(json['start'] as String),
+      end: _parseLocal(json['end'] as String),
       availableSpots: json['availableSpots'] as int? ?? 0,
     );
   }

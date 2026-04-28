@@ -9,6 +9,7 @@ import 'package:easypark_desktop/screens/reservation_history_screen.dart';
 import 'package:easypark_desktop/screens/reviews_screen.dart';
 import 'package:easypark_desktop/screens/users_screen.dart';
 import 'package:easypark_desktop/screens/report_screen.dart';
+import 'package:easypark_desktop/screens/profile_screen.dart';
 import 'package:easypark_desktop/main.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
 
@@ -28,7 +29,7 @@ final List<DrawerItem> drawerItems = [
     screen: const ParkingLocationsScreen(),
   ),
   DrawerItem(
-    title: 'Reservation History',
+    title: 'Orders & History',
     screen: const ReservationHistoryScreen(),
   ),
   DrawerItem(title: 'Reviews', screen: const ReviewsScreen()),
@@ -101,11 +102,22 @@ class MasterScreenState extends State<MasterScreen> {
                 icon: const Icon(Icons.person, color: EasyParkColors.onBackground),
                 color: EasyParkColors.surfaceElevated,
                 onSelected: (value) {
+                  if (value == 'profile') {
+                    navigateTo(const ProfileScreen());
+                    return;
+                  }
                   if (value == 'logout') {
                     _logout();
                   }
                 },
                 itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem<String>(
+                    value: 'profile',
+                    child: ListTile(
+                      leading: Icon(Icons.manage_accounts),
+                      title: Text('My Profile'),
+                    ),
+                  ),
                   const PopupMenuItem<String>(
                     value: 'logout',
                     child: ListTile(

@@ -13,7 +13,6 @@ namespace EasyPark.Services.Database
         public decimal Latitude { get; set; }
         public decimal Longitude { get; set; }
         public string? Description { get; set; }
-        // TotalSpots removed from DB - calculated dynamically from ParkingSpots.Count
         public decimal PricePerHour { get; set; }
         public decimal? PricePerDay { get; set; }
         public decimal PriceRegular { get; set; } = 0;
@@ -26,7 +25,6 @@ namespace EasyPark.Services.Database
         public DateTime? UpdatedAt { get; set; }
         public bool IsActive { get; set; }
 
-        // Attributes for Recommendation System (Content-Based Filtering)
         public bool HasVideoSurveillance { get; set; }
         public bool HasNightSurveillance { get; set; }
         public bool HasRamp { get; set; }
@@ -49,7 +47,6 @@ namespace EasyPark.Services.Database
         public bool HasAttendant { get; set; }
         public string? PaymentOptions { get; set; }
 
-        // Navigation properties
         public virtual User CreatedByUser { get; set; } = null!;
         public virtual City City { get; set; } = null!;
         public virtual ICollection<ParkingSpot> ParkingSpots { get; set; } = new List<ParkingSpot>();

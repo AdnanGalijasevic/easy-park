@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:easypark_desktop/models/search_result.dart';
 import 'package:easypark_desktop/providers/auth_provider.dart';
+import 'package:easypark_desktop/utils/api_error_parser.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
@@ -13,7 +14,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
   BaseProvider(String endpoint) {
     _endpoint = endpoint;
     _baseUrl = const String.fromEnvironment(
-      'baseUrl',
+      'API_BASE',
       defaultValue: 'http://localhost:8080/',
     );
   }
@@ -49,7 +50,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
       url = '$url?$queryString';
     }
     var uri = Uri.parse(url);
-    var response = await _executeWithAuthRetry(
+    var response = await executeWithAuthRetry(
       (refreshedHeaders) => http.get(uri, headers: refreshedHeaders),
     );
 
@@ -77,7 +78,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
     var url = '$_baseUrl$_endpoint/$id';
 
     var uri = Uri.parse(url);
-    var response = await _executeWithAuthRetry(
+    var response = await executeWithAuthRetry(
       (refreshedHeaders) => http.get(uri, headers: refreshedHeaders),
     );
     if (isValidResponse(response)) {
@@ -93,7 +94,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
     var url = '$_baseUrl$_endpoint';
     var uri = Uri.parse(url);
     var jsonRequest = jsonEncode(request);
-    var response = await _executeWithAuthRetry(
+    var response = await executeWithAuthRetry(
       (refreshedHeaders) =>
           http.post(uri, headers: refreshedHeaders, body: jsonRequest),
     );
@@ -109,7 +110,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
   Future delete(int id) async {
     var url = '$_baseUrl$_endpoint/$id';
     var uri = Uri.parse(url);
-    var response = await _executeWithAuthRetry(
+    var response = await executeWithAuthRetry(
       (refreshedHeaders) => http.delete(uri, headers: refreshedHeaders),
     );
     if (isValidResponse(response)) {
@@ -123,7 +124,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
     var url = '$_baseUrl$_endpoint/$id';
     var uri = Uri.parse(url);
     var jsonRequest = jsonEncode(request);
-    var response = await _executeWithAuthRetry(
+    var response = await executeWithAuthRetry(
       (refreshedHeaders) =>
           http.put(uri, headers: refreshedHeaders, body: jsonRequest),
     );
@@ -146,19 +147,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
         return true;
       }
 
-      final dynamic errorResponse = jsonDecode(response.body);
-      String? errorMessage;
-
-      if (errorResponse is Map<String, dynamic>) {
-        if (errorResponse.containsKey('message')) {
-          errorMessage = errorResponse['message'];
-        } else if (errorResponse['errors'] is Map<String, dynamic> &&
-            errorResponse['errors']['userError'] is List) {
-          errorMessage = (errorResponse['errors']['userError'] as List).join(
-            ', ',
-          );
-        }
-      }
+      final errorMessage = extractApiErrorMessage(response.body);
 
       if (response.statusCode == 400) {
         throw UserFriendlyException(errorMessage ?? 'Bad request');
@@ -193,7 +182,7 @@ abstract class BaseProvider<T> with ChangeNotifier {
     };
   }
 
-  Future<http.Response> _executeWithAuthRetry(
+  Future<http.Response> executeWithAuthRetry(
     Future<http.Response> Function(Map<String, String> headers) requestBuilder,
   ) async {
     var response = await requestBuilder(createHeaders());

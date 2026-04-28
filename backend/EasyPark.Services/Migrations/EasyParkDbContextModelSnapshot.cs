@@ -258,13 +258,13 @@ namespace EasyPark.Services.Migrations
                         .HasColumnType("nvarchar(20)");
 
                     b.Property<decimal>("PriceCovered")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<decimal>("PriceDisabled")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<decimal>("PriceElectric")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<decimal?>("PricePerDay")
                         .HasColumnType("decimal(10, 2)");
@@ -273,7 +273,7 @@ namespace EasyPark.Services.Migrations
                         .HasColumnType("decimal(10, 2)");
 
                     b.Property<decimal>("PriceRegular")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<decimal?>("SafetyRating")
                         .HasColumnType("decimal(3, 2)");
@@ -540,6 +540,33 @@ namespace EasyPark.Services.Migrations
                     b.ToTable("Reviews");
                 });
 
+            modelBuilder.Entity("EasyPark.Services.Database.RevokedToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("Jti")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime>("RevokedAt")
+                        .HasColumnType("datetime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Jti")
+                        .IsUnique();
+
+                    b.ToTable("RevokedTokens");
+                });
+
             modelBuilder.Entity("EasyPark.Services.Database.Role", b =>
                 {
                     b.Property<int>("Id")
@@ -630,7 +657,7 @@ namespace EasyPark.Services.Migrations
                         .HasColumnType("date");
 
                     b.Property<decimal>("Coins")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()

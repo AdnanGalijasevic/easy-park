@@ -20,7 +20,6 @@ namespace EasyPark.Services.Database
         public DateTime? UpdatedAt { get; set; }
         public bool EndingSoonNotificationSent { get; set; } = false;
 
-        // Navigation properties
         public virtual User User { get; set; } = null!;
         public virtual ParkingSpot ParkingSpot { get; set; } = null!;
         public virtual Transaction? Transaction { get; set; }

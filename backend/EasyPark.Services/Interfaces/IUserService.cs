@@ -10,7 +10,7 @@ namespace EasyPark.Services.Interfaces
     public interface IUserService : ICRUDService<User, UserSearchObject, UserInsertRequest, UserUpdateRequest>
     {
         Task<List<Role>> GetUserRolesAsync(int id);
-        User Login(string username, string password);
+        User Login(string username, string password, string? clientType);
         User GetForAuth(int id);
         User ToggleActiveStatus(int userId, UserToggleActiveRequest request);
         void ForgotPassword(string emailOrUsername);

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using Microsoft.EntityFrameworkCore.Storage;
 using EasyPark.Model;
+using EasyPark.Model.Constants;
 using EasyPark.Model.Models;
 using EasyPark.Model.Requests;
 using EasyPark.Model.SearchObjects;
@@ -13,6 +14,7 @@ using EasyPark.Services.Database;
 using EasyPark.Services.Helpers;
 using EasyPark.Services.Interfaces;
 using EasyPark.Services.Pdf;
+using Microsoft.Extensions.Configuration;
 using TransactionModel = EasyPark.Model.Models.Transaction;
 using TransactionDb = EasyPark.Services.Database.Transaction;
 
@@ -21,10 +23,18 @@ namespace EasyPark.Services.Services
     public class TransactionService : BaseCRUDService<TransactionModel, TransactionSearchObject, TransactionDb, TransactionInsertRequest, TransactionUpdateRequest>, ITransactionService
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly INotificationService? _notificationService;
+        private readonly HashSet<int> _allowedCoinPackages;
+        private readonly string? _checkoutSuccessUrl;
+        private readonly string? _checkoutCancelUrl;
 
-        public TransactionService(EasyParkDbContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor) : base(context, mapper)
+        public TransactionService(EasyParkDbContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IConfiguration? configuration = null, INotificationService? notificationService = null) : base(context, mapper)
         {
             _httpContextAccessor = httpContextAccessor;
+            _notificationService = notificationService;
+            _allowedCoinPackages = ParseAllowedCoinPackages(configuration?["Payments:AllowedCoinPackages"]);
+            _checkoutSuccessUrl = configuration?["Payments:CheckoutSuccessUrl"];
+            _checkoutCancelUrl = configuration?["Payments:CheckoutCancelUrl"];
         }
 
         public override IQueryable<TransactionDb> AddFilter(TransactionSearchObject search, IQueryable<TransactionDb> query)
@@ -108,7 +118,7 @@ namespace EasyPark.Services.Services
             }
 
             entity.UserId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
-            entity.Status = "Pending";
+            entity.Status = TransactionStatus.Pending;
             entity.Currency = request.Currency ?? "BAM";
             entity.CreatedAt = DateTime.UtcNow;
         }
@@ -122,13 +132,13 @@ namespace EasyPark.Services.Services
 
             if (!string.IsNullOrWhiteSpace(request.Status))
             {
-                var validStatuses = new[] { "Pending", "Completed", "Failed", "Refunded" };
+                var validStatuses = new[] { TransactionStatus.Pending, TransactionStatus.Completed, TransactionStatus.Failed, TransactionStatus.Refunded };
                 if (!validStatuses.Contains(request.Status))
                 {
                     throw new UserException($"Invalid status. Valid statuses are: {string.Join(", ", validStatuses)}", HttpStatusCode.BadRequest);
                 }
 
-                if (request.Status == "Completed" && !entity.PaymentDate.HasValue)
+                if (request.Status == TransactionStatus.Completed && !entity.PaymentDate.HasValue)
                 {
                     entity.PaymentDate = DateTime.UtcNow;
                 }
@@ -180,11 +190,13 @@ namespace EasyPark.Services.Services
             return pagedResult;
         }
 
-        public Stripe.PaymentIntent CreatePaymentIntent(int coinsAmount)
+        public StripePaymentResult CreatePaymentIntent(int coinsAmount)
         {
-            if (coinsAmount <= 0) throw new UserException("Coins amount must be greater than 0");
+            var normalizedAmount = NormalizeAndValidateCoinsAmount(coinsAmount);
+            var userId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
+            EnsureNoOpenPendingCoinPayment(userId);
 
-            long amountInCents = (long)(coinsAmount * 100);
+            long amountInCents = (long)(normalizedAmount * 100);
 
             var options = new Stripe.PaymentIntentCreateOptions
             {
@@ -193,8 +205,8 @@ namespace EasyPark.Services.Services
                 PaymentMethodTypes = new System.Collections.Generic.List<string> { "card" },
                 Metadata = new System.Collections.Generic.Dictionary<string, string>
                 {
-                    { "userId", CurrentUserHelper.GetRequiredUserId(_httpContextAccessor).ToString() },
-                    { "coinsAmount", coinsAmount.ToString() }
+                    { "userId", userId.ToString() },
+                    { "coinsAmount", normalizedAmount.ToString() }
                 }
             };
 
@@ -204,25 +216,32 @@ namespace EasyPark.Services.Services
             var transaction = new TransactionDb
             {
                 UserId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor),
-                Amount = coinsAmount,
+                Amount = normalizedAmount,
                 Currency = "BAM",
                 PaymentMethod = "Stripe",
-                Status = "Pending",
+                Status = TransactionStatus.Pending,
                 StripePaymentIntentId = intent.Id,
                 CreatedAt = DateTime.UtcNow
             };
             Context.Transactions.Add(transaction);
             Context.SaveChanges();
 
-            return intent;
+            return new StripePaymentResult
+            {
+                Id = intent.Id,
+                ClientSecret = intent.ClientSecret,
+                CoinsAmount = normalizedAmount,
+                IsPaid = false
+            };
         }
 
-        public Stripe.PaymentIntent CreatePaymentIntentForForm(int coinsAmount, int userId)
+        public Stripe.PaymentIntent CreatePaymentIntentForForm(int coinsAmount)
         {
-            if (coinsAmount <= 0) throw new UserException("Coins amount must be greater than 0");
-            if (userId <= 0) throw new UserException("Invalid user", System.Net.HttpStatusCode.Unauthorized);
+            var normalizedAmount = NormalizeAndValidateCoinsAmount(coinsAmount);
+            var userId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
+            EnsureNoOpenPendingCoinPayment(userId);
 
-            long amountInCents = (long)(coinsAmount * 100);
+            long amountInCents = (long)(normalizedAmount * 100);
 
             var options = new Stripe.PaymentIntentCreateOptions
             {
@@ -232,21 +251,22 @@ namespace EasyPark.Services.Services
                 Metadata = new System.Collections.Generic.Dictionary<string, string>
                 {
                     { "userId", userId.ToString() },
-                    { "coinsAmount", coinsAmount.ToString() }
+                    { "coinsAmount", normalizedAmount.ToString() }
                 }
             };
 
             var svc = new Stripe.PaymentIntentService();
             return svc.Create(options);
-            // NOTE: No DB transaction created here. CompletePurchase creates it on confirmed payment.
         }
 
         public Stripe.Checkout.Session CreateCheckoutSession(int coinsAmount)
         {
-            if (coinsAmount <= 0) throw new UserException("Coins amount must be greater than 0");
+            var normalizedAmount = NormalizeAndValidateCoinsAmount(coinsAmount);
+            var userId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
+            EnsureNoOpenPendingCoinPayment(userId);
 
-            var successUrl = "https://easypark-web.azurewebsites.net/payment-success?session_id={CHECKOUT_SESSION_ID}";
-            var cancelUrl = "https://easypark-web.azurewebsites.net/payment-cancel";
+            var successUrl = _checkoutSuccessUrl;
+            var cancelUrl = _checkoutCancelUrl;
 
             var request = _httpContextAccessor.HttpContext?.Request;
             if (request != null)
@@ -265,13 +285,23 @@ namespace EasyPark.Services.Services
                         cancelUrl = $"{appBase}/?payment_cancelled=true";
                     }
                 }
-                else if (request.Host.Host == "localhost" || request.Host.Host == "10.0.2.2" || request.Host.Host == "127.0.0.1")
+                else if (string.IsNullOrWhiteSpace(successUrl) || string.IsNullOrWhiteSpace(cancelUrl))
                 {
-                    // Fallback for same-origin requests
-                    var baseUrl = $"{request.Scheme}://{request.Host}";
-                    successUrl = $"{baseUrl}/Transaction/success?session_id={{CHECKOUT_SESSION_ID}}";
-                    cancelUrl = $"{baseUrl}/Transaction/cancel";
+                    var host = request.Host.Host;
+                    if (host == "localhost" || host == "10.0.2.2" || host == "127.0.0.1")
+                    {
+                        // Local fallback for same-origin requests
+                        var baseUrl = $"{request.Scheme}://{request.Host}";
+                        successUrl = $"{baseUrl}/Transaction/success?session_id={{CHECKOUT_SESSION_ID}}";
+                        cancelUrl = $"{baseUrl}/Transaction/cancel";
+                    }
                 }
+            }
+
+            if (string.IsNullOrWhiteSpace(successUrl) || string.IsNullOrWhiteSpace(cancelUrl))
+            {
+                throw new InvalidOperationException(
+                    "Checkout return URLs are not configured. Set 'Payments:CheckoutSuccessUrl' and 'Payments:CheckoutCancelUrl' (or provide request origin).");
             }
 
             var options = new Stripe.Checkout.SessionCreateOptions
@@ -283,11 +313,11 @@ namespace EasyPark.Services.Services
                     {
                         PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
                         {
-                            UnitAmount = (long)(coinsAmount * 100),
+                            UnitAmount = (long)(normalizedAmount * 100),
                             Currency = "bam",
                             ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions
                             {
-                                Name = $"{coinsAmount} EasyPark Coins",
+                                Name = $"{normalizedAmount} EasyPark Coins",
                                 Description = "Purchase coins for parking reservations",
                             },
                         },
@@ -299,22 +329,21 @@ namespace EasyPark.Services.Services
                 CancelUrl = cancelUrl,
                 Metadata = new System.Collections.Generic.Dictionary<string, string>
                 {
-                    { "userId", CurrentUserHelper.GetRequiredUserId(_httpContextAccessor).ToString() },
-                    { "coinsAmount", coinsAmount.ToString() }
+                    { "userId", userId.ToString() },
+                    { "coinsAmount", normalizedAmount.ToString() }
                 }
             };
 
             var service = new Stripe.Checkout.SessionService();
             var session = service.Create(options);
 
-            // Record pending transaction
             var transaction = new TransactionDb
             {
-                UserId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor),
-                Amount = coinsAmount,
+                UserId = userId,
+                Amount = normalizedAmount,
                 Currency = "BAM",
                 PaymentMethod = "Stripe",
-                Status = "Pending",
+                Status = TransactionStatus.Pending,
                 StripeTransactionId = session.Id,
                 StripePaymentIntentId = session.PaymentIntentId,
                 CreatedAt = DateTime.UtcNow
@@ -323,6 +352,100 @@ namespace EasyPark.Services.Services
             Context.SaveChanges();
 
             return session;
+        }
+
+        private int NormalizeAndValidateCoinsAmount(int coinsAmount)
+        {
+            if (coinsAmount <= 0)
+            {
+                throw new UserException("Coins amount must be greater than 0", HttpStatusCode.BadRequest);
+            }
+
+            if (!_allowedCoinPackages.Contains(coinsAmount))
+            {
+                var allowedList = string.Join(", ", _allowedCoinPackages.OrderBy(x => x));
+                throw new UserException($"Invalid coin package. Allowed packages: {allowedList}", HttpStatusCode.BadRequest);
+            }
+
+            return coinsAmount;
+        }
+
+        private void EnsureNoOpenPendingCoinPayment(int userId)
+        {
+            var staleThreshold = DateTime.UtcNow.AddMinutes(-30);
+
+            var stalePending = Context.Transactions
+                .Where(t =>
+                    t.UserId == userId &&
+                    t.ReservationId == null &&
+                    t.PaymentMethod == "Stripe" &&
+                    t.Status == TransactionStatus.Pending &&
+                    t.CreatedAt <= staleThreshold)
+                .ToList();
+
+            if (stalePending.Count > 0)
+            {
+                foreach (var tx in stalePending)
+                {
+                    tx.Status = TransactionStatus.Failed;
+                }
+
+                Context.SaveChanges();
+            }
+
+            var hasPending = Context.Transactions.Any(t =>
+                t.UserId == userId &&
+                t.ReservationId == null &&
+                t.PaymentMethod == "Stripe" &&
+                t.Status == TransactionStatus.Pending);
+
+            if (hasPending)
+            {
+                throw new UserException(
+                    "You already have a pending coin payment. Complete or cancel it before starting a new one.",
+                    HttpStatusCode.Conflict);
+            }
+        }
+
+        public int CancelPendingCoinPayments()
+        {
+            var userId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
+            var pending = Context.Transactions
+                .Where(t =>
+                    t.UserId == userId &&
+                    t.ReservationId == null &&
+                    t.PaymentMethod == "Stripe" &&
+                    t.Status == TransactionStatus.Pending)
+                .ToList();
+
+            if (pending.Count == 0)
+            {
+                return 0;
+            }
+
+            foreach (var tx in pending)
+            {
+                tx.Status = TransactionStatus.Failed;
+            }
+
+            Context.SaveChanges();
+            return pending.Count;
+        }
+
+        private static HashSet<int> ParseAllowedCoinPackages(string? configured)
+        {
+            var values = (configured ?? "10,20,50,100")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(v => int.TryParse(v, out var parsed) ? parsed : -1)
+                .Where(v => v > 0)
+                .ToHashSet();
+
+            if (values.Count == 0)
+            {
+                return new HashSet<int> { 10, 20, 50, 100 };
+            }
+
+            return values;
         }
 
         public TransactionModel CompletePurchase(string paymentIntentId)
@@ -345,8 +468,9 @@ namespace EasyPark.Services.Services
                 .OrderByDescending(t => t.Id)
                 .FirstOrDefault(t => t.StripePaymentIntentId == paymentIntentId);
 
-            if (transaction != null && transaction.Status == "Completed")
+            if (transaction != null && transaction.Status == TransactionStatus.Completed)
             {
+                EnsureTransactionOwnership(transaction);
                 dbTx.Commit();
                 return Mapper.Map<TransactionModel>(transaction);
             }
@@ -364,6 +488,12 @@ namespace EasyPark.Services.Services
                     userId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
                 }
 
+                if (!CurrentUserHelper.IsAdmin(_httpContextAccessor) &&
+                    userId != CurrentUserHelper.GetRequiredUserId(_httpContextAccessor))
+                {
+                    throw new UserException("Forbidden", HttpStatusCode.Forbidden);
+                }
+
                 long coinsAmount = intent.AmountReceived / 100;
                 transaction = new TransactionDb
                 {
@@ -371,12 +501,16 @@ namespace EasyPark.Services.Services
                     Amount = (decimal)coinsAmount,
                     Currency = "BAM",
                     PaymentMethod = "Stripe",
-                    Status = "Pending",
-                    StripePaymentIntentId = paymentIntentId,
+                Status = TransactionStatus.Pending,
+                StripePaymentIntentId = paymentIntentId,
                     CreatedAt = DateTime.UtcNow
                 };
                 Context.Transactions.Add(transaction);
                 Context.SaveChanges();
+            }
+            else
+            {
+                EnsureTransactionOwnership(transaction);
             }
 
             ValidateAmountAndCurrency(transaction, intent.AmountReceived, intent.Currency);
@@ -410,7 +544,8 @@ namespace EasyPark.Services.Services
                 .FirstOrDefault(t => t.StripePaymentIntentId == checkoutSessionId);
 
             if (transaction == null) throw new UserException("Transaction not found", HttpStatusCode.NotFound);
-            if (transaction.Status == "Completed") return Mapper.Map<TransactionModel>(transaction);
+            EnsureTransactionOwnership(transaction);
+            if (transaction.Status == TransactionStatus.Completed) return Mapper.Map<TransactionModel>(transaction);
             if (session.PaymentStatus != "paid") return Mapper.Map<TransactionModel>(transaction);
 
             ValidateAmountAndCurrency(transaction, session.AmountTotal ?? 0, session.Currency);
@@ -425,9 +560,30 @@ namespace EasyPark.Services.Services
             return Mapper.Map<TransactionModel>(transaction);
         }
 
+        public void CompletePurchaseByPaymentIntentId(string paymentIntentId)
+        {
+            if (string.IsNullOrWhiteSpace(paymentIntentId))
+                return;
+
+            using IDbContextTransaction dbTx = Context.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
+
+            var transaction = Context.Transactions
+                .OrderByDescending(t => t.Id)
+                .FirstOrDefault(t => t.StripePaymentIntentId == paymentIntentId);
+
+            if (transaction == null || transaction.Status == "Completed")
+            {
+                dbTx.Commit();
+                return;
+            }
+
+            MarkTransactionCompleted(transaction);
+            dbTx.Commit();
+        }
+
         private void MarkTransactionCompleted(TransactionDb transaction)
         {
-            transaction.Status = "Completed";
+            transaction.Status = TransactionStatus.Completed;
             transaction.PaymentDate = DateTime.UtcNow;
 
             var user = Context.Users.Find(transaction.UserId);
@@ -438,6 +594,12 @@ namespace EasyPark.Services.Services
 
             user.Coins += transaction.Amount;
             Context.SaveChanges();
+
+            _notificationService?.CreateNotification(
+                transaction.UserId,
+                "Payment Successful",
+                $"Payment of {transaction.Amount} coins completed successfully.",
+                "Success");
         }
 
         private static void ValidateAmountAndCurrency(TransactionDb transaction, long amountInMinorUnits, string? stripeCurrency)
@@ -451,6 +613,20 @@ namespace EasyPark.Services.Services
             if (!string.Equals(stripeCurrency, transaction.Currency, StringComparison.OrdinalIgnoreCase))
             {
                 throw new UserException("Payment currency mismatch", HttpStatusCode.BadRequest);
+            }
+        }
+
+        private void EnsureTransactionOwnership(TransactionDb transaction)
+        {
+            if (CurrentUserHelper.IsAdmin(_httpContextAccessor))
+            {
+                return;
+            }
+
+            var currentUserId = CurrentUserHelper.GetRequiredUserId(_httpContextAccessor);
+            if (transaction.UserId != currentUserId)
+            {
+                throw new UserException("Forbidden", HttpStatusCode.Forbidden);
             }
         }
 
@@ -490,7 +666,7 @@ namespace EasyPark.Services.Services
             {
                 // Fallback: if there are no Stripe records in period, include other completed payments
                 // so finance report still shows reservation-related revenue.
-                var fallbackQuery = baseQuery.Where(t => t.Status == "Completed");
+                var fallbackQuery = baseQuery.Where(t => t.Status == TransactionStatus.Completed);
                 if (!allTime)
                 {
                     var start = new DateTime(year!.Value, month!.Value, 1, 0, 0, 0, DateTimeKind.Utc);

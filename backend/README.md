@@ -29,9 +29,10 @@
    docker-compose down
    ```
 
-### Optional: `.env` configuration
+### Required: `.env` configuration
 
-Create a `.env` file in the `backend` folder (optional). The compose file already has defaults.
+Create a `.env` file in the `backend` folder before running compose.
+Current `docker-compose.yml` uses required variable guards (`:?required`) for critical values.
 
 ```env
 _rabbitMqUser=guest
@@ -40,9 +41,18 @@ _rabbitMqHost=rabbitmq
 _rabbitMqPort=5672
 _saPassword=QWEasd123!
 _source=sqlserver
-_catalog=EasyParkDB
+_catalog=220016
+_stripe=sk_test_xxx
+_stripePublishableKey=pk_test_xxx
+_stripePublishable=pk_test_xxx
+_stripeWebhookSecret=whsec_xxx
+_jwtKey=dev_jwt_key_change_me_please_32_chars_min
+_jwtIssuer=easypark-api
+_jwtAudience=easypark-clients
+_corsOrigins=http://localhost:3000,http://localhost:8080,http://localhost:54878
+_connectionString=Server=sqlserver,1433;Database=220016;User Id=sa;Password=QWEasd123!;TrustServerCertificate=True;
 
-# SMTP (optional)
+# SMTP (required by subscriber mail worker)
 _fromAddress=your-email@gmail.com
 _password=your-app-password
 _host=smtp.gmail.com
@@ -51,6 +61,8 @@ _displayName=EasyPark
 _timeout=255
 _port=465
 ```
+
+Tip: use `backend/.env.example` as base template, then fill local values.
 
 ---
 
@@ -70,7 +82,7 @@ _port=465
 
 2. Run API project:
    ```powershell
-   dotnet run --project EasyPark.API/backend.csproj
+   dotnet run --project EasyPark.API/EasyPark.API.csproj
    ```
 
 3. In another terminal, run Subscriber:
@@ -87,8 +99,8 @@ _port=465
 
 ## Test Users (after seed)
 
-- **Desktop admin**: username `desktop`, password `Test123!`
-- **Mobile user**: username `mobile`, password `Test123!`
+- **Desktop admin**: username `desktop`, password `test`
+- **Mobile user**: username `mobile`, password `test`
 
 ---
 
@@ -103,7 +115,7 @@ Check Docker status and internet connection.
 ### `dotnet run` can't find project
 Use:
 ```powershell
-dotnet run --project EasyPark.API/backend.csproj
+dotnet run --project EasyPark.API/EasyPark.API.csproj
 ```
 
 ### Port already in use

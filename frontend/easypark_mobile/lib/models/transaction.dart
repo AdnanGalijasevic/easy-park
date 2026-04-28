@@ -12,6 +12,8 @@ class Transaction {
   final String type;
   final int? reservationId;
   final String? description;
+  @JsonKey(name: 'isPaid', defaultValue: false)
+  final bool isPaid;
 
   Transaction({
     required this.id,
@@ -20,6 +22,7 @@ class Transaction {
     this.type = 'Debit',
     this.reservationId,
     this.description,
+    this.isPaid = false,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) =>

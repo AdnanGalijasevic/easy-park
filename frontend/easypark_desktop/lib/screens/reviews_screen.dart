@@ -4,6 +4,7 @@ import 'package:easypark_desktop/models/review_model.dart';
 import 'package:easypark_desktop/providers/parking_location_provider.dart';
 import 'package:easypark_desktop/providers/review_provider.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class ReviewsScreen extends StatefulWidget {
   const ReviewsScreen({super.key});
@@ -35,7 +36,6 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       if (!mounted) return;
       setState(() => _parkingLocations = names);
     } catch (_) {
-      // Non-blocking for reviews table.
     }
   }
 
@@ -59,7 +59,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading reviews: $e'),
+            content: Text('Failed to load reviews: ${normalizeErrorMessage(e)}'),
             backgroundColor: EasyParkColors.error,
           ),
         );
@@ -74,7 +74,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Review deleted successfully'),
+            content: Text('Review deleted successfully.'),
             backgroundColor: EasyParkColors.success,
           ),
         );
@@ -83,7 +83,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error deleting review: $e'),
+            content: Text('Failed to delete review: ${normalizeErrorMessage(e)}'),
             backgroundColor: EasyParkColors.error,
           ),
         );
@@ -135,7 +135,6 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       appBar: AppBar(
         title: const Text('Reviews'),
         actions: [
-          // Parking location filter
           Container(
             width: 220,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -181,7 +180,6 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
               ),
             ),
           ),
-          // Rating filter
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),

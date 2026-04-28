@@ -9,7 +9,7 @@ namespace EasyPark.Services.Interfaces
     public interface IParkingLocationService : ICRUDService<ParkingLocation, ParkingLocationSearchObject, ParkingLocationInsertRequest, ParkingLocationUpdateRequest>
     {
         void UpdateCalculatedFields(int parkingLocationId);
-        List<EasyPark.Model.Models.ParkingLocation> GetRecommendationScores(int userId, int? cityId = null);
+        List<EasyPark.Model.Models.ParkingLocation> GetRecommendationScores(int userId, int? cityId = null, double? userLat = null, double? userLon = null, int count = 3);
 
         /// <summary>
         /// Returns busy/free time windows per spot type for a given day range.

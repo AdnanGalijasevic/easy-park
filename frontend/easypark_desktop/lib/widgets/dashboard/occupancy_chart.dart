@@ -23,14 +23,12 @@ class _OccupancyChartState extends State<OccupancyChart> {
 
   int _touchedIndex = -1;
 
-  /// Number of days to display (last N days)
   static const _days = 30;
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
 
-    // Build per-day data: index 0 = (_days-1) days ago, last index = today
     final dailyData = <int, Map<String, double>>{};
     for (int i = 0; i < _days; i++) {
       dailyData[i] = {for (var t in _spotTypes) t: 0};
@@ -193,7 +191,6 @@ class _OccupancyChartState extends State<OccupancyChart> {
                               reservedSize: 22,
                               getTitlesWidget: (v, _) {
                                 final i = v.toInt();
-                                // Show label every 5 days
                                 if (i % 5 != 0) return const SizedBox.shrink();
                                 final day = DateTime(
                                   now.year,

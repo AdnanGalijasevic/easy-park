@@ -4,7 +4,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
 
 class MarkerService {
-  // Cache for generated markers to avoid re-drawing them unnecessarily
   final Map<String, BitmapDescriptor> _markerCache = {};
 
   /// Creates a custom marker with a label (e.g., price) and a specific color.
@@ -27,14 +26,12 @@ class MarkerService {
     final canvas = Canvas(pictureRecorder);
     final paint = Paint()..color = color;
 
-    // Draw pill shape background
     final rRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, width, height),
       const Radius.circular(25),
     );
     canvas.drawRRect(rRect, paint);
 
-    // Draw triangle arrow at bottom to point to location
     final path = Path();
     path.moveTo(width / 2 - 10, height);
     path.lineTo(width / 2, height + 15);
@@ -53,7 +50,6 @@ class MarkerService {
       canvas.drawPath(path, stroke);
     }
 
-    // Draw text (label)
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
@@ -77,7 +73,6 @@ class MarkerService {
       ),
     );
 
-    // Convert to image
     final imgHeight = (height + 15).toInt(); // +15 for the arrow
     final picture = pictureRecorder.endRecording();
     final image = await picture.toImage(width.toInt(), imgHeight);

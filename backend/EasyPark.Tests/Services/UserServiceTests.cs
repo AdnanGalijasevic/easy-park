@@ -45,7 +45,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void ToggleActiveStatus_ShouldDeactivateUser_WhenCalledWithFalse()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var service = new UserService(context, mapper, TestClaimsHelper.CreateAccessor(), new Mock<IRabbitMQService>().Object);
@@ -53,6 +52,7 @@ namespace EasyPark.Tests.Services
             var userRoleObject = new EasyPark.Services.Database.Role { Id = 1, Name = "User" };
             context.Roles.Add(userRoleObject);
             
+            // DB stores UTC in production; DateTime.Now is test-only fixture value.
             var user = new EasyPark.Services.Database.User
             {
                 Id = 1,
@@ -80,10 +80,8 @@ namespace EasyPark.Tests.Services
 
             var toggleRequest = new UserToggleActiveRequest { IsActive = false };
 
-            // Act
             var result = service.ToggleActiveStatus(1, toggleRequest);
 
-            // Assert
             var updatedUser = context.Users.Find(1);
             Assert.NotNull(updatedUser);
             Assert.False(updatedUser.IsActive);
@@ -93,7 +91,6 @@ namespace EasyPark.Tests.Services
         [Fact]
         public void ToggleActiveStatus_ShouldThrowException_WhenUserIsAdmin()
         {
-            // Arrange
             var context = GetInMemoryContext();
             var mapper = GetMockMapper();
             var service = new UserService(context, mapper, TestClaimsHelper.CreateAccessor(), new Mock<IRabbitMQService>().Object);
@@ -128,7 +125,6 @@ namespace EasyPark.Tests.Services
 
             var toggleRequest = new UserToggleActiveRequest { IsActive = false };
 
-            // Act & Assert
             var exception = Assert.Throws<UserException>(() => service.ToggleActiveStatus(2, toggleRequest));
             Assert.Equal("Cannot deactivate a user with the Admin role.", exception.Message);
         }

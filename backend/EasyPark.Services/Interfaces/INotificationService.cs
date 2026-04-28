@@ -8,5 +8,6 @@ namespace EasyPark.Services.Interfaces
     {
         void MarkAsRead(int id);
         void MarkAllAsReadForCurrentUser();
+        void CreateNotification(int userId, string title, string message, string type = "Info");
     }
 }

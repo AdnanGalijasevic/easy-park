@@ -26,7 +26,6 @@ class DashboardStatsHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Summary row
         Row(
           children: [
             _buildStatCard(
@@ -52,7 +51,6 @@ class DashboardStatsHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        // Per-type row
         Row(
           children: [
             _buildTypeCard(

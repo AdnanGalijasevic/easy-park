@@ -158,7 +158,6 @@ class _RevenueChartState extends State<RevenueChart> {
                               showTitles: true,
                               reservedSize: 52,
                               getTitlesWidget: (val, meta) {
-                                // Only show labels at nice intervals
                                 if (val == meta.min || val == meta.max) {
                                   return const SizedBox.shrink();
                                 }

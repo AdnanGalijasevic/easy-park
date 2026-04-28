@@ -51,13 +51,12 @@ class _BulkSpotCreatorState extends State<BulkSpotCreator> {
     final count = int.parse(_countController.text);
     if (count <= 0 || count > 100) {
       setState(() {
-        _countError = 'Count must be between 1 and 100';
+        _countError = 'Count must be between 1 and 100.';
       });
       return;
     }
 
     widget.onSpotsCreated(_selectedSpotType, count);
-    // Navigator.pop(context); // Removed as it is now inline
   }
 
   @override

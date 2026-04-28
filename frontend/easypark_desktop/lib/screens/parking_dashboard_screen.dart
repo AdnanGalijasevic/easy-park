@@ -11,6 +11,7 @@ import 'package:easypark_desktop/providers/parking_spot_provider.dart';
 import 'package:easypark_desktop/providers/reservation_provider.dart';
 import 'package:easypark_desktop/providers/review_provider.dart';
 import 'package:easypark_desktop/screens/master_screen.dart';
+import 'package:easypark_desktop/screens/parking_locations_screen.dart';
 import 'package:easypark_desktop/screens/parking_location_wizard.dart';
 import 'package:easypark_desktop/widgets/dashboard/stats_header.dart';
 import 'package:easypark_desktop/widgets/dashboard/occupancy_chart.dart';
@@ -18,6 +19,7 @@ import 'package:easypark_desktop/widgets/dashboard/revenue_chart.dart';
 import 'package:easypark_desktop/widgets/dashboard/reviews_list.dart';
 import 'package:easypark_desktop/widgets/dashboard/spots_status_card.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class ParkingDashboardScreen extends StatefulWidget {
   final ParkingLocation location;
@@ -50,8 +52,6 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
     _loadReservations();
   }
 
-  // ── Data loaders ────────────────────────────────────────────────────────────
-
   Future<void> _loadSpots() async {
     try {
       final result = await _spotProvider.get(
@@ -67,7 +67,9 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingSpots = false);
-        _showError('Error loading spots: $e');
+        _showError(
+          'Could not load parking spots for this location: ${normalizeErrorMessage(e)}',
+        );
       }
     }
   }
@@ -87,7 +89,9 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingReviews = false);
-        _showError('Error loading reviews: $e');
+        _showError(
+          'Could not load location reviews: ${normalizeErrorMessage(e)}',
+        );
       }
     }
   }
@@ -109,7 +113,12 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoadingReservations = false);
+      if (mounted) {
+        setState(() => _isLoadingReservations = false);
+        _showError(
+          'Could not load recent reservations: ${normalizeErrorMessage(e)}',
+        );
+      }
     }
   }
 
@@ -134,7 +143,8 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
       final monthReservations = _reservations
           .where(
             (r) =>
-                !r.startTime.isBefore(monthDate) && r.startTime.isBefore(nextMonth),
+                !r.startTime.isBefore(monthDate) &&
+                r.startTime.isBefore(nextMonth),
           )
           .toList();
       final completedRevenue = monthReservations
@@ -145,11 +155,14 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
         0,
         (sum, r) =>
             sum +
-            r.endTime.difference(r.startTime).inMinutes.clamp(0, 24 * 60) / 60.0,
+            r.endTime.difference(r.startTime).inMinutes.clamp(0, 24 * 60) /
+                60.0,
       );
       final monthCapacityHours = _spots.isEmpty
           ? 1.0
-          : (_spots.length * DateUtils.getDaysInMonth(monthDate.year, monthDate.month) * 24)
+          : (_spots.length *
+                    DateUtils.getDaysInMonth(monthDate.year, monthDate.month) *
+                    24)
                 .toDouble();
       final occupancyPercent = (totalHours / monthCapacityHours) * 100;
 
@@ -167,14 +180,17 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
 
   Future<void> _exportPdfReport() async {
     if (_isLoadingReservations || _isLoadingSpots) {
-      _showError('Sačekaj da se dashboard podaci učitaju pa pokušaj opet.');
+      _showError('Wait for dashboard data to finish loading, then try again.');
       return;
     }
 
     final metrics = _buildMonthlyMetrics();
     final maxRevenue = metrics.isEmpty
         ? 1.0
-        : metrics.map((m) => m.revenue).reduce((a, b) => a > b ? a : b).clamp(1, double.infinity);
+        : metrics
+              .map((m) => m.revenue)
+              .reduce((a, b) => a > b ? a : b)
+              .clamp(1, double.infinity);
 
     final doc = pw.Document();
     doc.addPage(
@@ -203,11 +219,15 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
                   pw.Expanded(
                     child: pw.Container(
                       height: 10,
-                      decoration: pw.BoxDecoration(color: PdfColors.blue100),
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.blue100,
+                      ),
                       child: pw.Align(
                         alignment: pw.Alignment.centerLeft,
                         child: pw.Container(
-                          width: 260 * (m.revenue / maxRevenue).clamp(0, 1).toDouble(),
+                          width:
+                              260 *
+                              (m.revenue / maxRevenue).clamp(0, 1).toDouble(),
                           color: PdfColors.blue600,
                         ),
                       ),
@@ -234,12 +254,15 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
                   pw.Expanded(
                     child: pw.Container(
                       height: 10,
-                      decoration: pw.BoxDecoration(color: PdfColors.green100),
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.green100,
+                      ),
                       child: pw.Align(
                         alignment: pw.Alignment.centerLeft,
                         child: pw.Container(
                           width:
-                              260 * (m.occupancyPercent / 100).clamp(0, 1).toDouble(),
+                              260 *
+                              (m.occupancyPercent / 100).clamp(0, 1).toDouble(),
                           color: PdfColors.green600,
                         ),
                       ),
@@ -271,8 +294,6 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
     await Printing.layoutPdf(onLayout: (_) => doc.save());
   }
 
-  // ── Spot actions ─────────────────────────────────────────────────────────────
-
   Future<void> _toggleOccupied(ParkingSpot spot) async {
     try {
       await _spotProvider.update(spot.id, {
@@ -284,7 +305,11 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
       });
       await _loadSpots();
     } catch (e) {
-      if (mounted) _showError('Error updating spot: $e');
+      if (mounted) {
+        _showError(
+          'Could not update spot occupancy status: ${normalizeErrorMessage(e)}',
+        );
+      }
     }
   }
 
@@ -299,7 +324,11 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
       });
       await _loadSpots();
     } catch (e) {
-      if (mounted) _showError('Error updating spot active status: $e');
+      if (mounted) {
+        _showError(
+          'Could not update whether the spot is active: ${normalizeErrorMessage(e)}',
+        );
+      }
     }
   }
 
@@ -307,53 +336,65 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
     try {
       await _spotProvider.delete(id);
       await _loadSpots();
-      if (mounted) _showSuccess('Spot deleted successfully');
+      if (mounted) _showSuccess('Parking spot removed successfully.');
     } catch (e) {
-      if (mounted) _showError('Error deleting spot: $e');
+      if (mounted) {
+        _showError('Could not delete parking spot: ${normalizeErrorMessage(e)}');
+      }
     }
   }
-
-  // ── Review actions ────────────────────────────────────────────────────────────
 
   Future<void> _deleteReview(int id) async {
     try {
       await _reviewProvider.delete(id);
       await _loadReviews();
-      if (mounted) _showSuccess('Review deleted successfully');
+      if (mounted) _showSuccess('Review removed successfully.');
     } catch (e) {
-      if (mounted) _showError('Error deleting review: $e');
+      if (mounted) {
+        _showError('Could not delete review: ${normalizeErrorMessage(e)}');
+      }
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
-
   void _showError(String msg) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: EasyParkColors.error));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: EasyParkColors.error),
+    );
   }
 
   void _showSuccess(String msg) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: EasyParkColors.success));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: EasyParkColors.success),
+    );
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final canExportPdf = !(_isLoadingReservations || _isLoadingSpots);
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: Text('${widget.location.name} Dashboard'),
           automaticallyImplyLeading: false,
+          leading: IconButton(
+            tooltip: 'Back to parking locations',
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => masterScreenKey.currentState?.navigateTo(
+              const ParkingLocationsScreen(),
+            ),
+          ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.picture_as_pdf),
-              tooltip: 'Export PDF report',
-              onPressed: _exportPdfReport,
+            Tooltip(
+              message: canExportPdf
+                  ? 'Export PDF report'
+                  : 'Wait for dashboard data to finish loading.',
+              child: IconButton(
+                icon: const Icon(Icons.picture_as_pdf),
+                tooltip: 'Export PDF report',
+                onPressed: canExportPdf ? _exportPdfReport : null,
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.edit),

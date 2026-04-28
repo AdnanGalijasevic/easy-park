@@ -1,18 +1,37 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:easypark_mobile/models/user.dart';
 import 'package:easypark_mobile/services/auth_service.dart';
 import 'package:easypark_mobile/services/transaction_service.dart';
+import 'package:easypark_mobile/utils/session_events.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
   User? _user;
   bool _isLoading = false;
+  StreamSubscription<SessionEvent>? _sessionSubscription;
+  bool _handlingUnauthorized = false;
 
   User? get user => _user;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
 
   AuthService get service => _authService;
+
+  Future<void> _handleUnauthorized() async {
+    if (_handlingUnauthorized) return;
+    _handlingUnauthorized = true;
+    try {
+      _user = null;
+      await _authService.logout();
+      notifyListeners();
+    } catch (_) {
+      _user = null;
+      notifyListeners();
+    } finally {
+      _handlingUnauthorized = false;
+    }
+  }
 
   Future<void> login(String username, String password) async {
     _isLoading = true;
@@ -150,6 +169,12 @@ class AuthProvider with ChangeNotifier {
 
   // Restore previously issued JWT session and cached profile.
   Future<void> init() async {
+    _sessionSubscription ??= SessionEvents.stream.listen((event) {
+      if (event == SessionEvent.unauthorized) {
+        _handleUnauthorized();
+      }
+    });
+
     _isLoading = true;
     notifyListeners();
 
@@ -169,5 +194,12 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _sessionSubscription?.cancel();
+    _sessionSubscription = null;
+    super.dispose();
   }
 }

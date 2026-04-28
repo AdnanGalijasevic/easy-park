@@ -1,5 +1,7 @@
 import 'package:easypark_mobile/providers/auth_provider.dart';
-import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/screens/reset_password_screen.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
+import 'package:easypark_mobile/utils/input_validators.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -29,23 +31,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'If the account exists, reset instructions have been sent.',
-          ),
-          backgroundColor: EasyParkColors.success,
-        ),
+      AppFeedback.success(
+        'If account exists, reset instructions have been sent.',
       );
-      Navigator.of(context).pop();
+      
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: EasyParkColors.error,
-        ),
-      );
+      AppFeedback.error(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -75,9 +70,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   validator: (value) {
                     final input = value?.trim() ?? '';
-                    if (input.isEmpty) {
-                      return 'Email or username is required.';
-                    }
+                    final required = InputValidators.requiredText(
+                      input,
+                      'Email or username',
+                    );
+                    if (required != null) return required;
                     if (input.length < 3) {
                       return 'Enter at least 3 characters.';
                     }

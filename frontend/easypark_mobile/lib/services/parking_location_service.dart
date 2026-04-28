@@ -6,6 +6,8 @@ import 'package:easypark_mobile/models/parking_location.dart';
 import 'package:easypark_mobile/services/base_service.dart';
 import 'package:easypark_mobile/utils/constants.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:easypark_mobile/services/auth_service.dart';
+import 'package:easypark_mobile/utils/client_type.dart';
 
 class ParkingLocationService extends BaseService<ParkingLocation> {
   ParkingLocationService() : super("ParkingLocation");
@@ -18,6 +20,8 @@ class ParkingLocationService extends BaseService<ParkingLocation> {
 
   Future<List<ParkingLocation>> getRecommendations(int? cityId) async {
     String? accessToken = await _storage.read(key: 'accessToken');
+    accessToken ??= AuthService.currentAccessToken;
+    final clientType = resolveClientType();
 
     if (accessToken == null) {
       return []; // Return empty if not authenticated
@@ -32,7 +36,7 @@ class ParkingLocationService extends BaseService<ParkingLocation> {
     final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $accessToken',
-      'X-Client-Type': 'mobile',
+      'X-Client-Type': clientType,
     };
 
     final response = await http.get(uri, headers: headers);

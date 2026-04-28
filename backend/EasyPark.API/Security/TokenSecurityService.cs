@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using EasyPark.Model.Models;
+using EasyPark.Services.Interfaces;
 using Microsoft.IdentityModel.Tokens;
 
 namespace EasyPark.API.Security
@@ -20,7 +21,7 @@ namespace EasyPark.API.Security
     public class TokenSecurityService : ITokenSecurityService
     {
         private readonly JwtSecurityTokenHandler _jwtHandler = new();
-        private readonly ConcurrentDictionary<string, DateTime> _revokedJwtJtis = new();
+        private readonly ITokenRevocationStore _revocationStore;
         private readonly ConcurrentDictionary<string, RefreshTokenState> _refreshTokens = new();
         private readonly byte[] _jwtKeyBytes;
         private readonly string _issuer;
@@ -28,11 +29,12 @@ namespace EasyPark.API.Security
         private readonly int _accessTokenExpiryMinutes;
         private readonly int _refreshTokenExpiryDays;
 
-        public TokenSecurityService(IConfiguration configuration)
+        public TokenSecurityService(IConfiguration configuration, ITokenRevocationStore revocationStore)
         {
+            _revocationStore = revocationStore;
             var jwtKey = Environment.GetEnvironmentVariable("_jwtKey") ?? configuration["Jwt:Key"];
-            _issuer = Environment.GetEnvironmentVariable("_jwtIssuer") ?? configuration["Jwt:Issuer"] ?? "easypark-api";
-            _audience = Environment.GetEnvironmentVariable("_jwtAudience") ?? configuration["Jwt:Audience"] ?? "easypark-clients";
+            _issuer = Environment.GetEnvironmentVariable("_jwtIssuer") ?? configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT issuer is not configured. Set '_jwtIssuer' or 'Jwt:Issuer'.");
+            _audience = Environment.GetEnvironmentVariable("_jwtAudience") ?? configuration["Jwt:Audience"] ?? throw new InvalidOperationException("JWT audience is not configured. Set '_jwtAudience' or 'Jwt:Audience'.");
 
             if (!int.TryParse(Environment.GetEnvironmentVariable("_jwtExpirationMinutes") ?? configuration["Jwt:ExpirationMinutes"], out _accessTokenExpiryMinutes))
             {
@@ -132,7 +134,7 @@ namespace EasyPark.API.Security
             }
 
             var exp = token.ValidTo == DateTime.MinValue ? DateTime.UtcNow.AddHours(1) : token.ValidTo.ToUniversalTime();
-            _revokedJwtJtis[jti] = exp;
+            _revocationStore.Revoke(jti, exp);
         }
 
         public bool IsJwtRevoked(string jwtToken)
@@ -144,12 +146,7 @@ namespace EasyPark.API.Security
                 return false;
             }
 
-            if (_revokedJwtJtis.TryGetValue(jti, out var revokedUntil) && revokedUntil > DateTime.UtcNow)
-            {
-                return true;
-            }
-
-            return false;
+            return _revocationStore.IsRevoked(jti);
         }
 
         private static string GenerateRefreshToken()
@@ -161,15 +158,12 @@ namespace EasyPark.API.Security
         private void CleanupExpiredEntries()
         {
             var now = DateTime.UtcNow;
-            foreach (var entry in _revokedJwtJtis.Where(x => x.Value <= now).ToList())
-            {
-                _revokedJwtJtis.TryRemove(entry.Key, out _);
-            }
-
             foreach (var entry in _refreshTokens.Where(x => x.Value.ExpiresAtUtc <= now).ToList())
             {
                 _refreshTokens.TryRemove(entry.Key, out _);
             }
+
+            _revocationStore.DeleteExpired();
         }
 
         private record struct RefreshTokenState(int UserId, DateTime ExpiresAtUtc)

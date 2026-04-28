@@ -92,5 +92,19 @@ namespace EasyPark.Services.Services
             }
             Context.SaveChanges();
         }
+
+        public void CreateNotification(int userId, string title, string message, string type = "Info")
+        {
+            Context.Notifications.Add(new NotificationDb
+            {
+                UserId = userId,
+                Title = title,
+                Message = message,
+                Type = type,
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            });
+            Context.SaveChanges();
+        }
     }
 }

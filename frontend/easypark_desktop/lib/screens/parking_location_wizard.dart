@@ -2,18 +2,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:easypark_desktop/app_colors.dart';
+import 'package:easypark_desktop/models/city_coordinate_model.dart';
 import 'package:easypark_desktop/models/parking_location_model.dart';
 import 'package:easypark_desktop/models/parking_spot_model.dart';
 import 'package:easypark_desktop/providers/parking_location_provider.dart';
 import 'package:easypark_desktop/providers/parking_spot_provider.dart';
 import 'package:easypark_desktop/screens/master_screen.dart';
 import 'package:easypark_desktop/screens/parking_locations_screen.dart';
-import 'package:easypark_desktop/utils/constants.dart';
 import 'package:easypark_desktop/widgets/map_picker.dart';
 import 'package:easypark_desktop/widgets/parking_spot_list_item.dart';
 import 'package:easypark_desktop/widgets/photo_picker.dart';
 import 'package:easypark_desktop/widgets/bulk_spot_creator.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class ParkingLocationWizardScreen extends StatefulWidget {
   final ParkingLocation? location;
@@ -34,21 +35,19 @@ class _ParkingLocationWizardScreenState
   bool _isLoading = false;
   final _formKeyDetails = GlobalKey<FormState>();
   final _formKeyPricing = GlobalKey<FormState>();
+  List<CityCoordinate> _cities = [];
 
-  // Step 1: Info & Location
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
-  // Replaced controller with selected city string from dropdown
-  String? _selectedCity = 'Mostar'; // Default to Mostar
+  String? _selectedCity = 'Mostar';
   int? _selectedCityId;
 
-  double _latitude = 43.3438; // Default (Mostar)
+  double _latitude = 43.3438;
   double _longitude = 17.8078;
   List<int>? _selectedPhoto;
 
-  // Step 2: Amenities & Pricing
   bool _hasVideoSurveillance = false;
   bool _hasNightSurveillance = false;
   bool _hasOnlinePayment = false;
@@ -69,13 +68,36 @@ class _ParkingLocationWizardScreenState
       TextEditingController();
   final TextEditingController _priceCoveredController = TextEditingController();
 
-  // Step 3: Spots Management
-  int? _createdLocationId; // Set after initial save
+  int? _createdLocationId;
   List<ParkingSpot> _spots = [];
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: EasyParkColors.error, content: Text(message)),
+    );
+  }
+
+  double _parsePriceOrFallback(
+    TextEditingController controller, {
+    required double fallback,
+  }) {
+    final raw = controller.text.trim();
+    if (raw.isEmpty) return fallback;
+    return double.tryParse(raw) ?? fallback;
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadCities();
     if (widget.location != null) {
       _populateData(widget.location!);
       _createdLocationId = widget.location!.id;
@@ -104,6 +126,44 @@ class _ParkingLocationWizardScreenState
     } catch (e) {
       debugPrint('Error loading spots: $e');
     }
+  }
+
+  Future<void> _loadCities() async {
+    try {
+      var cities = await _locationProvider.getCities();
+      if (mounted) {
+        setState(() {
+          _cities = cities;
+          _syncSelectedCityForEdit();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading cities: $e');
+    }
+  }
+
+  void _syncSelectedCityForEdit() {
+    final location = widget.location;
+    if (location == null || _cities.isEmpty) return;
+
+    final byId = _cities.where((c) => c.city == location.city).toList();
+    if (byId.isNotEmpty) {
+      _selectedCity = byId.first.city;
+      _selectedCityId = location.cityId;
+      return;
+    }
+
+    final normalizedLocationCity = location.city.trim().toLowerCase();
+    final byName = _cities.where(
+      (c) => c.city.trim().toLowerCase() == normalizedLocationCity,
+    );
+    if (byName.isNotEmpty) {
+      _selectedCity = byName.first.city;
+      _selectedCityId = location.cityId;
+      return;
+    }
+
+    _selectedCity = null;
   }
 
   Future<void> _fetchAddressFromMap(double lat, double lng) async {
@@ -138,12 +198,14 @@ class _ParkingLocationWizardScreenState
                 data['display_name']?.split(',').first ?? 'Unknown Street';
           }
 
-          setState(() {
-            _addressController.text = newAddress;
-            if (city.isNotEmpty && citiesBiH.contains(city)) {
-              _selectedCity = city;
-            }
-          });
+          if (mounted) {
+            setState(() {
+              _addressController.text = newAddress;
+              if (city.isNotEmpty && _cities.any((c) => c.city == city)) {
+                _selectedCity = city;
+              }
+            });
+          }
         }
       }
     } catch (e) {
@@ -156,14 +218,9 @@ class _ParkingLocationWizardScreenState
     _descriptionController.text = loc.description ?? '';
     _addressController.text = loc.address;
 
-    // Set selected city. If legacy city not in list, fallback or keep (Dropdown might error if Value not in items)
-    if (citiesBiH.contains(loc.city)) {
+    if (_cities.any((c) => c.city == loc.city)) {
       _selectedCity = loc.city;
     } else {
-      // If city is not in list, we can't show it in Dropdown unless we add it or use a text field.
-      // For now, we'll try to default to something or just set it if it happens to be valid.
-      // A better approach for legacy data is adding it to list dynamically or alerting.
-      // Assuming data is clean or we accept non-matching will reset to Default/Null
       _selectedCity = null;
     }
     _selectedCityId = loc.cityId;
@@ -191,15 +248,24 @@ class _ParkingLocationWizardScreenState
     _hasAttendant = loc.hasAttendant;
     _hasSecurityGuard = loc.hasSecurityGuard;
     _hasRamp = loc.hasRamp;
+
+    final operating = loc.operatingHours?.trim();
+    if (operating != null && operating.contains('-')) {
+      final parts = operating.split('-');
+      if (parts.length == 2) {
+        _openTime = _parseTime(parts[0].trim());
+        _closeTime = _parseTime(parts[1].trim());
+      }
+    }
+
+    _sync24HoursFromTimes();
   }
 
   Future<void> _submitLocation() async {
     if (!_formKeyDetails.currentState!.validate() ||
         !_formKeyPricing.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please check all fields in previous steps'),
-        ),
+      _showError(
+        'Please fix highlighted fields before saving location details.',
       );
       return;
     }
@@ -217,26 +283,41 @@ class _ParkingLocationWizardScreenState
         if (cityLookup.result.isNotEmpty) {
           resolvedCityId = cityLookup.result.first.cityId;
         }
-      } catch (_) {
-        // Keep null and let backend validation report clear message.
-      }
+      } catch (_) {}
+    }
+
+    final regularPrice = _parsePriceOrFallback(
+      _priceRegularController,
+      fallback: 0,
+    );
+
+    if (!_is24Hours && (_openTime == null || _closeTime == null)) {
+      setState(() => _isLoading = false);
+      _showError('Set both open and close time, or enable 24-hour mode.');
+      return;
     }
 
     final locationData = {
-      'name': _nameController.text,
-      'description': _descriptionController.text,
-      'address': _addressController.text,
+      'name': _nameController.text.trim(),
+      'description': _descriptionController.text.trim(),
+      'address': _addressController.text.trim(),
       'cityId': resolvedCityId,
       'latitude': _latitude,
       'longitude': _longitude,
-      // "totalSpots": 0, // Removed based on backend change
-      'pricePerHour':
-          double.tryParse(_priceRegularController.text) ??
-          0, // Fallback base price
-      'priceRegular': double.tryParse(_priceRegularController.text) ?? 0,
-      'priceDisabled': double.tryParse(_priceDisabledController.text) ?? 0,
-      'priceElectric': double.tryParse(_priceElectricController.text) ?? 0,
-      'priceCovered': double.tryParse(_priceCoveredController.text) ?? 0,
+      'pricePerHour': regularPrice,
+      'priceRegular': regularPrice,
+      'priceDisabled': _parsePriceOrFallback(
+        _priceDisabledController,
+        fallback: regularPrice,
+      ),
+      'priceElectric': _parsePriceOrFallback(
+        _priceElectricController,
+        fallback: regularPrice,
+      ),
+      'priceCovered': _parsePriceOrFallback(
+        _priceCoveredController,
+        fallback: regularPrice,
+      ),
       'photo': _selectedPhoto != null ? base64Encode(_selectedPhoto!) : null,
 
       'hasVideoSurveillance': _hasVideoSurveillance,
@@ -250,51 +331,54 @@ class _ParkingLocationWizardScreenState
       'hasRamp': _hasRamp,
       'isActive': true,
       'createdByName': 'Admin',
+      'operatingHours': _is24Hours
+          ? null
+          : '${_formatTime(_openTime!)}-${_formatTime(_closeTime!)}',
     };
 
     try {
       if (_createdLocationId == null) {
-        // Create new
         var result = await _locationProvider.insert(locationData);
         _createdLocationId = result.id;
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location saved! You can now add spots.'),
-            ),
-          );
-        }
+        _showSuccess('Location saved. You can now add parking spots.');
       } else {
-        // Update existing
         await _locationProvider.update(_createdLocationId!, locationData);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Location updated!')));
-        }
+        _showSuccess('Location updated successfully.');
       }
 
-      // Always reload spots when entering Step 3 / updating
       _loadSpots();
 
-      // Move to next step (Spots) if not there
       if (_currentStep < 2) {
         setState(() => _currentStep++);
       }
     } catch (e) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Error'),
-            content: Text(e.toString()),
-          ),
-        );
-      }
+      _showError('Failed to save location: ${normalizeErrorMessage(e)}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  TimeOfDay? _parseTime(String raw) {
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  String _formatTime(TimeOfDay time) {
+    final hh = time.hour.toString().padLeft(2, '0');
+    final mm = time.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
+
+  bool get _hasDefinedOperatingWindow => _openTime != null && _closeTime != null;
+
+  void _sync24HoursFromTimes() {
+    _is24Hours = !_hasDefinedOperatingWindow;
   }
 
   Future<void> _addBulkSpots(String spotType, int count) async {
@@ -311,16 +395,10 @@ class _ParkingLocationWizardScreenState
         };
         await _spotProvider.insert(spot);
       }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$count $spotType spots added!')),
-      );
+      _showSuccess('$count $spotType spots added.');
       _loadSpots();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      _showError('Failed to create spots: ${normalizeErrorMessage(e)}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -437,7 +515,6 @@ class _ParkingLocationWizardScreenState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left col: Fields
           Expanded(
             flex: 1,
             child: Column(
@@ -448,20 +525,51 @@ class _ParkingLocationWizardScreenState
                     labelText: 'Parking Name',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Parking name is required.';
+                    }
+                    if (v.trim().length < 3) {
+                      return 'Parking name must have at least 3 characters.';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
+                  key: ValueKey(_selectedCity ?? 'city-none'),
                   initialValue: _selectedCity,
                   decoration: const InputDecoration(
                     labelText: 'City',
                     border: OutlineInputBorder(),
                   ),
-                  items: citiesBiH.map((city) {
-                    return DropdownMenuItem(value: city, child: Text(city));
+                  items: _cities.map((city) {
+                    return DropdownMenuItem(
+                      value: city.city,
+                      child: Text(city.city),
+                    );
                   }).toList(),
-                  onChanged: (val) => setState(() => _selectedCity = val),
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedCity = val;
+                      final cityObj = _cities.firstWhere(
+                        (c) => c.city == val,
+                        orElse: () => CityCoordinate(
+                          city: '',
+                          latitude: _latitude,
+                          longitude: _longitude,
+                        ),
+                      );
+                      _selectedCityId = val == null ? null : _resolveCityId(val);
+                      if (cityObj.city.isNotEmpty) {
+                        _latitude = cityObj.latitude;
+                        _longitude = cityObj.longitude;
+                      }
+                    });
+                  },
+                  validator: (v) => v == null || v.isEmpty
+                      ? 'City selection is required.'
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -494,7 +602,6 @@ class _ParkingLocationWizardScreenState
             ),
           ),
           const SizedBox(width: 24),
-          // Right col: Map
           Expanded(
             flex: 2,
             child: Column(
@@ -544,7 +651,12 @@ class _ParkingLocationWizardScreenState
                     initialTime:
                         _openTime ?? const TimeOfDay(hour: 6, minute: 0),
                   );
-                  if (t != null) setState(() => _openTime = t);
+                  if (t != null) {
+                    setState(() {
+                      _openTime = t;
+                      _sync24HoursFromTimes();
+                    });
+                  }
                 },
                 child: Text(
                   _openTime == null
@@ -560,7 +672,12 @@ class _ParkingLocationWizardScreenState
                     initialTime:
                         _closeTime ?? const TimeOfDay(hour: 22, minute: 0),
                   );
-                  if (t != null) setState(() => _closeTime = t);
+                  if (t != null) {
+                    setState(() {
+                      _closeTime = t;
+                      _sync24HoursFromTimes();
+                    });
+                  }
                 },
                 child: Text(
                   _closeTime == null
@@ -571,7 +688,9 @@ class _ParkingLocationWizardScreenState
               const SizedBox(width: 16),
               Checkbox(
                 value: _is24Hours,
-                onChanged: (v) => setState(() => _is24Hours = v!),
+                onChanged: _hasDefinedOperatingWindow
+                    ? null
+                    : (v) => setState(() => _is24Hours = v ?? true),
               ),
               const Text('Open 24 Hours'),
             ],
@@ -660,6 +779,7 @@ class _ParkingLocationWizardScreenState
   }
 
   Widget _buildPriceInput(TextEditingController controller, String label) {
+    final isRegular = label == 'Regular';
     return TextFormField(
       controller: controller,
       keyboardType: TextInputType.number,
@@ -668,23 +788,35 @@ class _ParkingLocationWizardScreenState
         border: const OutlineInputBorder(),
         prefixText: '\$',
       ),
-      validator: (v) => v!.isEmpty ? 'Required' : null,
+      validator: (v) {
+        final raw = v?.trim() ?? '';
+        if (raw.isEmpty) {
+          return isRegular ? '$label price is required.' : null;
+        }
+        final parsed = double.tryParse(raw);
+        if (parsed == null) return 'Enter valid number for $label price.';
+        if (parsed < 0) return '$label price cannot be negative.';
+        return null;
+      },
     );
+  }
+
+  int? _resolveCityId(String cityName) {
+    if (widget.location != null &&
+        widget.location!.city.trim().toLowerCase() ==
+            cityName.trim().toLowerCase()) {
+      return widget.location!.cityId;
+    }
+    return null;
   }
 
   Future<void> _deleteSpot(int id) async {
     try {
       await _spotProvider.delete(id);
       _loadSpots();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Spot deleted successfully')),
-      );
+      _showSuccess('Spot deleted successfully.');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting spot: $e')),
-      );
+      _showError('Failed to delete spot: ${normalizeErrorMessage(e)}');
     }
   }
 
@@ -700,10 +832,7 @@ class _ParkingLocationWizardScreenState
       await _spotProvider.update(spot.id, updatedSpot);
       _loadSpots();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating spot: $e')),
-      );
+      _showError('Failed to update spot status: ${normalizeErrorMessage(e)}');
     }
   }
 

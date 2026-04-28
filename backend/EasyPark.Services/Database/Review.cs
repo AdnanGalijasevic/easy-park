@@ -12,7 +12,6 @@ namespace EasyPark.Services.Database
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
-        // Navigation properties
         public virtual User User { get; set; } = null!;
         public virtual ParkingLocation ParkingLocation { get; set; } = null!;
     }

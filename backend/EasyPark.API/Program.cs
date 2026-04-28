@@ -1,16 +1,19 @@
 using Mapster;
+using Serilog;
+using Serilog.Formatting.Json;
 using EasyPark.API.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using EasyPark.Model.Constants;
 using EasyPark.Model.Requests;
+using EasyPark.Services.BackgroundServices;
 using EasyPark.Services.Database;
 using EasyPark.Services.Interfaces;
 using EasyPark.Services.Services;
+using TokenRevocationStore = EasyPark.Services.Services.TokenRevocationStore;
 using EasyPark.API.Filters;
-using EasyPark.Services.BackgroundServices;
-using Hangfire;
 using System.Text;
 using ReservationUpdateRequest = EasyPark.Model.Requests.ReservationUpdateRequest;
 using ReviewUpdateRequest = EasyPark.Model.Requests.ReviewUpdateRequest;
@@ -20,9 +23,12 @@ QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Host.UseSerilog((ctx, cfg) =>
+    cfg.ReadFrom.Configuration(ctx.Configuration)
+       .WriteTo.Console(new JsonFormatter()));
+
 builder.Services.AddHttpContextAccessor();
 
-// Add services to the container.
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IParkingLocationService, ParkingLocationService>();
 builder.Services.AddScoped<IParkingSpotService, ParkingSpotService>();
@@ -35,25 +41,15 @@ builder.Services.AddScoped<IReservationHistoryService, ReservationHistoryService
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<IRabbitMQService, RabbitMQService>();
 builder.Services.AddScoped<EasyPark.API.Filters.ExceptionFilter>();
-builder.Services.AddScoped<ReservationStatusUpdater>();
+builder.Services.AddSingleton<ITokenRevocationStore, TokenRevocationStore>();
 builder.Services.AddSingleton<ITokenSecurityService, TokenSecurityService>();
+builder.Services.AddHostedService<ReservationStatusUpdater>();
 
 builder.Services.AddControllers(x =>
 {
     x.Filters.Add<ExceptionFilter>();
 });
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", builder =>
-    {
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader();
-    });
-});
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -83,20 +79,16 @@ var connectionString = Environment.GetEnvironmentVariable("_connectionString")
 builder.Services.AddDbContext<EasyParkDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-builder.Services.AddHangfire(configuration => configuration
-    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-    .UseSimpleAssemblyNameTypeSerializer()
-    .UseRecommendedSerializerSettings()
-    .UseSqlServerStorage(connectionString));
-
-builder.Services.AddHangfireServer();
-
 builder.Services.AddMapster();
 
 var stripeSecretKey = Environment.GetEnvironmentVariable("_stripe")
     ?? builder.Configuration["Stripe:SecretKey"]
     ?? throw new InvalidOperationException("Stripe secret key is not configured. Set '_stripe' env var or 'Stripe:SecretKey' in appsettings.");
 Stripe.StripeConfiguration.ApiKey = stripeSecretKey;
+
+var stripePublishableKey = Environment.GetEnvironmentVariable("_stripePublishable")
+    ?? builder.Configuration["Stripe:PublishableKey"]
+    ?? string.Empty;
 
 TypeAdapterConfig<UserUpdateRequest, EasyPark.Services.Database.User>
     .NewConfig()
@@ -108,13 +100,10 @@ TypeAdapterConfig<EasyPark.Services.Database.User, EasyPark.Model.Models.User>.N
 TypeAdapterConfig<ParkingLocationUpdateRequest, EasyPark.Services.Database.ParkingLocation>
     .NewConfig()
     .IgnoreNullValues(true)
-    .Ignore(dest => dest.Photo);
-// TotalSpots doesn't exist in DB model - Mapster will automatically skip it
-
+    .Ignore(dest => dest.Photo!);
 TypeAdapterConfig<ParkingLocationInsertRequest, EasyPark.Services.Database.ParkingLocation>
     .NewConfig()
-    .Ignore(dest => dest.Photo);
-// TotalSpots doesn't exist in DB model - Mapster will automatically skip it
+    .Ignore(dest => dest.Photo!);
 
 TypeAdapterConfig<EasyPark.Services.Database.ParkingLocation, EasyPark.Model.Models.ParkingLocation>.NewConfig()
     .Map(
@@ -159,7 +148,8 @@ TypeAdapterConfig<TransactionUpdateRequest, EasyPark.Services.Database.Transacti
 
 TypeAdapterConfig<EasyPark.Services.Database.Transaction, EasyPark.Model.Models.Transaction>.NewConfig()
     .Map(dest => dest.UserFullName, src => src.User.FirstName + " " + src.User.LastName)
-    .Map(dest => dest.Type, src => src.ReservationId != null ? "Debit" : "Credit");
+    .Map(dest => dest.Type, src => src.ReservationId != null ? "Debit" : "Credit")
+    .Map(dest => dest.IsPaid, src => src.Status == TransactionStatus.Completed);
 
 TypeAdapterConfig<EasyPark.Services.Database.Report, EasyPark.Model.Models.Report>.NewConfig()
     .Map(dest => dest.ParkingLocationName, src => src.ParkingLocation != null ? src.ParkingLocation.Name : null)
@@ -173,11 +163,19 @@ TypeAdapterConfig<NotificationUpdateRequest, EasyPark.Services.Database.Notifica
     .IgnoreNullValues(true);
 
 var jwtKey = Environment.GetEnvironmentVariable("_jwtKey") ?? builder.Configuration["Jwt:Key"];
-var jwtIssuer = Environment.GetEnvironmentVariable("_jwtIssuer") ?? builder.Configuration["Jwt:Issuer"] ?? "easypark-api";
-var jwtAudience = Environment.GetEnvironmentVariable("_jwtAudience") ?? builder.Configuration["Jwt:Audience"] ?? "easypark-clients";
+var jwtIssuer = Environment.GetEnvironmentVariable("_jwtIssuer") ?? builder.Configuration["Jwt:Issuer"];
+var jwtAudience = Environment.GetEnvironmentVariable("_jwtAudience") ?? builder.Configuration["Jwt:Audience"];
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
     throw new InvalidOperationException("JWT key is not configured. Set '_jwtKey' env var or 'Jwt:Key' in appsettings.");
+}
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+{
+    throw new InvalidOperationException("JWT issuer is not configured. Set '_jwtIssuer' env var or 'Jwt:Issuer' in configuration.");
+}
+if (string.IsNullOrWhiteSpace(jwtAudience))
+{
+    throw new InvalidOperationException("JWT audience is not configured. Set '_jwtAudience' env var or 'Jwt:Audience' in configuration.");
 }
 
 builder.Services
@@ -259,7 +257,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -283,14 +280,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseHangfireDashboard();
-
 using (var scope = app.Services.CreateScope())
 {
     var dataContext = scope.ServiceProvider.GetRequiredService<EasyParkDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     
-    // Retry logic
     int maxRetries = 10;
     int retryDelaySeconds = 5;
     bool migrationSucceeded = false;
@@ -335,11 +329,7 @@ using (var scope = app.Services.CreateScope())
             logger.LogError($"Error adding seed data: {ex.Message}");
         }
 
-        RecurringJob.AddOrUpdate<ReservationStatusUpdater>(
-            "CheckReservations",
-            updater => updater.CheckReservations(),
-            Cron.MinuteInterval(30));
-        logger.LogInformation("Hangfire recurring job registered.");
+        logger.LogInformation("Database migration and seed completed.");
     }
 }
 

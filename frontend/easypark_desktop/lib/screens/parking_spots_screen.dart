@@ -10,6 +10,7 @@ import 'package:easypark_desktop/widgets/pagination_controls.dart';
 import 'package:easypark_desktop/widgets/bulk_spot_creator.dart';
 import 'package:easypark_desktop/widgets/parking_spot_editor.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
+import 'package:easypark_desktop/utils/error_message.dart';
 
 class ParkingSpotsScreen extends StatefulWidget {
   const ParkingSpotsScreen({super.key});
@@ -29,6 +30,20 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
   int _totalPages = 0;
   bool _isLoading = true;
   Timer? _debounce;
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: EasyParkColors.error));
+  }
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: EasyParkColors.success));
+  }
 
   @override
   void initState() {
@@ -52,21 +67,7 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
         _locations = searchResult.result;
       });
     } catch (e) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Error'),
-            content: Text(e.toString()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Ok'),
-              ),
-            ],
-          ),
-        );
-      }
+      _showError('Failed to load parking locations: ${normalizeErrorMessage(e)}');
     }
   }
 
@@ -97,21 +98,7 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       setState(() {
         _isLoading = false;
       });
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Error'),
-            content: Text(e.toString()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Ok'),
-              ),
-            ],
-          ),
-        );
-      }
+      _showError('Failed to load parking spots: ${normalizeErrorMessage(e)}');
     }
   }
 
@@ -146,34 +133,14 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
               await _spotProvider.insert(spot);
             }
 
-            if (!mounted) return;
             setState(() {
               _currentPage = 0;
               _isLoading = true;
             });
             await _loadSpots();
-
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$count parking spots added successfully'),
-              ),
-            );
+            _showSuccess('$count parking spots were added successfully.');
           } catch (e) {
-            if (!mounted) return;
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Error'),
-                content: Text(e.toString()),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Ok'),
-                  ),
-                ],
-              ),
-            );
+            _showError('Failed to add parking spots: ${normalizeErrorMessage(e)}');
           }
         },
       ),
@@ -196,27 +163,9 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
                 _isLoading = true;
               });
               await _loadSpots();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Parking spot added successfully'),
-                ),
-              );
+              _showSuccess('Parking spot was added successfully.');
             } catch (e) {
-              if (!mounted) return;
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Error'),
-                  content: Text(e.toString()),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Ok'),
-                    ),
-                  ],
-                ),
-              );
+              _showError('Failed to add parking spot: ${normalizeErrorMessage(e)}');
             }
           },
         );
@@ -237,27 +186,9 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
               if (!dialogContext.mounted) return;
               Navigator.of(dialogContext).pop();
               await _loadSpots();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Parking spot updated successfully'),
-                ),
-              );
+              _showSuccess('Parking spot was updated successfully.');
             } catch (e) {
-              if (!mounted) return;
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Error'),
-                  content: Text(e.toString()),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Ok'),
-                    ),
-                  ],
-                ),
-              );
+              _showError('Failed to update parking spot: ${normalizeErrorMessage(e)}');
             }
           },
         );
@@ -290,26 +221,9 @@ class ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       try {
         await _spotProvider.delete(spot.id);
         await _loadSpots();
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Parking spot deleted successfully')),
-        );
+        _showSuccess('Parking spot was deleted successfully.');
       } catch (e) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Error'),
-            content: Text(e.toString()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Ok'),
-              ),
-            ],
-          ),
-        );
+        _showError('Failed to delete parking spot: ${normalizeErrorMessage(e)}');
       }
     }
   }

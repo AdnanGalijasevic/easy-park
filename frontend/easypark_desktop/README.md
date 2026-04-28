@@ -35,9 +35,9 @@ lib/
 ## Features
 
 - **Parking Locations Management**: Full CRUD operations with map-based location selection
-- **Parking Spots Management**: CRUD operations with bulk spot creation (e.g., add 5 disabled spots at once)
 - **Reservation History**: View logs of all reservation status changes
-- **Authentication**: Basic authentication with username/password
+- **Reports and Dashboard**: Monthly reporting, dashboard metrics, and PDF export paths
+- **Authentication and Account Flows**: Login/logout, forgot/reset password, and profile/password update screens
 
 ## Running the Application
 
@@ -65,7 +65,7 @@ flutter run -d windows
 
 Or specify a different base URL:
 ```bash
-flutter run -d windows --dart-define=baseUrl=http://localhost:8080/
+flutter run -d windows --dart-define=API_BASE=http://localhost:8080/
 ```
 
 ## Default Credentials
@@ -76,8 +76,8 @@ flutter run -d windows --dart-define=baseUrl=http://localhost:8080/
 ## Configuration
 
 The API base URL can be configured via:
-- Environment variable: `baseUrl` (default: `http://localhost:8080/`)
-- Command line: `--dart-define=baseUrl=<your-url>`
+- Environment variable: `API_BASE` (default: `http://localhost:8080/`)
+- Command line: `--dart-define=API_BASE=<your-url>`
 
 ## Code Style
 

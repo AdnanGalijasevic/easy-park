@@ -76,7 +76,6 @@ namespace EasyPark.Services.Services
 
         public override void BeforeUpdate(BookmarkUpdateRequest request, BookmarkDb entity)
         {
-            // Bookmark doesn't have updatable fields
             throw new UserException("Bookmark cannot be updated", HttpStatusCode.BadRequest);
         }
 

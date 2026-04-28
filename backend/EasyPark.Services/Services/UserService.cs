@@ -108,8 +108,9 @@ namespace EasyPark.Services.Services
             var defaultRole = Context.Roles.FirstOrDefault(r => r.Name == "User");
             if (defaultRole == null)
             {
-                // System configuration error — not a user error
-                throw new Exception("Default 'User' role not found in database. Check DB seed.");
+                throw new BusinessException(
+                    "Unable to complete registration at the moment. Please contact administrator.",
+                    HttpStatusCode.InternalServerError);
             }
 
             entity.UserRoles = new List<Database.UserRole>
@@ -138,7 +139,7 @@ namespace EasyPark.Services.Services
         public override void BeforeUpdate(UserUpdateRequest request, Database.User entity)
         {
             if (entity == null)
-                throw new UserException("User not found.", HttpStatusCode.NotFound);
+                throw new NotFoundException("User not found.");
 
             if (!CurrentUserHelper.IsAdmin(_httpContextAccessor) && CurrentUserHelper.GetRequiredUserId(_httpContextAccessor) != entity.Id)
                 throw new UserException("Forbidden", HttpStatusCode.Forbidden);
@@ -185,11 +186,17 @@ namespace EasyPark.Services.Services
             return Mapper.Map<List<Model.Models.Role>>(roles);
         }
 
-        public Model.Models.User Login(string username, string password)
+        public Model.Models.User Login(string username, string password, string? clientType)
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             {
                 throw new UserException("Username and password are required", HttpStatusCode.BadRequest);
+            }
+
+            var normalizedClientType = clientType?.Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(normalizedClientType) || (normalizedClientType != "desktop" && normalizedClientType != "mobile"))
+            {
+                throw new UserException("Invalid or missing 'X-Client-Type' header. Must be 'desktop' or 'mobile'.", HttpStatusCode.BadRequest);
             }
 
             var entity = Context.Users
@@ -211,6 +218,17 @@ namespace EasyPark.Services.Services
             if (!isPasswordValid)
             {
                 throw new UserException("Invalid username or password", HttpStatusCode.Unauthorized);
+            }
+
+            var isAdmin = entity.UserRoles.Any(ur => ur.Role?.Name == "Admin");
+            if (normalizedClientType == "desktop" && !isAdmin)
+            {
+                throw new UserException("Only admins can log in from the desktop app.", HttpStatusCode.Unauthorized);
+            }
+
+            if (normalizedClientType == "mobile" && isAdmin)
+            {
+                throw new UserException("Admins cannot log in from the mobile app.", HttpStatusCode.Unauthorized);
             }
 
             // Migrate legacy SHA1 hash to BCrypt on successful login.
@@ -248,7 +266,7 @@ namespace EasyPark.Services.Services
                 .FirstOrDefault(u => u.Id == userId);
 
             if (user == null)
-                throw new UserException("User not found.", HttpStatusCode.NotFound);
+                throw new NotFoundException("User not found.");
 
             bool isAdmin = user.UserRoles.Any(ur => ur.Role.Name == "Admin");
 

@@ -7,6 +7,7 @@ import 'package:easypark_mobile/services/marker_service.dart';
 import 'package:easypark_mobile/models/parking_location.dart';
 import 'package:easypark_mobile/widgets/location_card.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
+import 'package:easypark_mobile/utils/app_feedback.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,13 +26,12 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final parking = context.read<ParkingLocationProvider>();
-      parking.loadData(search: {'City': _selectedCity});
+      parking.loadData(search: {'City': parking.homeMapCity});
       parking.loadCityCoordinates();
       parking.loadRecommendations(null);
     });
   }
 
-  String _selectedCity = 'Mostar';
   static const LatLng _defaultMapCenter = LatLng(43.9159, 17.6791);
 
   final MarkerService _markerService = MarkerService();
@@ -56,8 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final avgLng =
           cityLocations.map((e) => e.longitude).reduce((a, b) => a + b) /
           cityLocations.length;
-      // Keep backend city coordinates as source of truth.
-      // Only fall back to location-derived center if city is missing in backend table.
       centers.putIfAbsent(city, () => LatLng(avgLat, avgLng));
     });
 
@@ -83,7 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ParkingLocationProvider provider,
   ) {
     if (newCity == null) return;
-    setState(() => _selectedCity = newCity);
+    provider.setHomeMapCity(newCity);
     provider.selectLocation(null);
     provider.loadData(search: {'City': newCity});
     final target = cityCenters[newCity];
@@ -100,7 +98,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Focuses the map on the given location by animating the camera.
   void _focusMapOnLocation(ParkingLocation location) {
     _animateCameraTo(location);
   }
@@ -122,16 +119,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (loc == null) {
       if (parking.items.isEmpty) {
-        // Locations not loaded yet — keep pending and retry on next build.
         return;
       }
       shell.clearPendingMapFocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'This parking location is no longer available on the map.',
-          ),
-        ),
+      AppFeedback.info(
+        'This parking location is no longer available on the map.',
       );
       return;
     }
@@ -139,7 +131,6 @@ class _HomeScreenState extends State<HomeScreen> {
     shell.clearPendingMapFocus();
 
     final selected = loc;
-    setState(() => _selectedCity = selected.city);
     parking.selectLocation(selected);
 
     if (_mapController != null) {
@@ -199,9 +190,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final provider = context.watch<ParkingLocationProvider>();
     final cityCenters = _buildCityCenters(provider.items, provider);
     final cityNames = cityCenters.keys.toList()..sort();
-    final effectiveSelectedCity = cityNames.contains(_selectedCity)
-        ? _selectedCity
-        : (cityNames.isNotEmpty ? cityNames.first : _selectedCity);
+    final mapCity = provider.homeMapCity;
+    final effectiveSelectedCity = cityNames.contains(mapCity)
+        ? mapCity
+        : (cityNames.isNotEmpty ? cityNames.first : mapCity);
 
     if (shell.pendingParkingLocationIdToFocus != null && !provider.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _tryApplyShellFocus());
@@ -275,7 +267,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     : null,
               ),
               onPressed: () {
-                // Get cityId from the currently loaded locations
                 final cityId = provider.items.isNotEmpty ? provider.items.first.cityId : null;
                 provider.toggleSortByRecommendation(cityId);
               },
@@ -339,7 +330,6 @@ class _HomeScreenState extends State<HomeScreen> {
           )
           .toList();
 
-      // Safety fallback: if no normalized match, show all available locations.
       if (displayLocations.isEmpty && provider.items.isNotEmpty) {
         displayLocations = provider.items;
       }
@@ -389,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         margin: const EdgeInsets.only(right: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: EasyParkColors.success.withOpacity(0.15),
+                          color: EasyParkColors.success.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: EasyParkColors.success, width: 1),
                         ),
@@ -437,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         provider.getRecommendationExplanation(loc),
                         style: TextStyle(
                           fontSize: 11,
-                          color: EasyParkColors.success.withOpacity(0.85),
+                          color: EasyParkColors.success.withValues(alpha: 0.85),
                           fontStyle: FontStyle.italic,
                         ),
                       ),

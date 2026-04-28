@@ -17,6 +17,7 @@ namespace EasyPark.Model.Models
         public string? StripePaymentIntentId { get; set; }
         public DateTime? PaymentDate { get; set; }
         public DateTime CreatedAt { get; set; }
+        public bool IsPaid { get; set; }
     }
 }
 

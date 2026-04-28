@@ -1,74 +1,92 @@
-# Recommender dokumentacija (EasyPark)
+# Recommender Documentation (EasyPark)
 
-## Pregled
+## Overview
 
-EasyPark koristi **content-based preporuke** za parking lokacije na osnovu prethodnih zavrsenih rezervacija korisnika.
+EasyPark uses a **content-based recommendation** strategy for parking locations.
 
-Implementacija je u:
-- `backend/EasyPark.Services/Services/ParkingLocationService.cs` (`GetRecommendationScores`)
-- Endpoint: `GET /ParkingLocation/recommendations`
+Implementation:
+- Service method: `backend/EasyPark.Services/Services/ParkingLocationService.cs` -> `GetRecommendationScores`
+- API endpoint: `GET /ParkingLocation/recommendations`
 
-## Ulazni podaci
+Query parameters:
+- `cityId` (optional)
+- `lat`, `lon` (optional, for distance boost)
+- `count` (optional, default `3`, clamped to `1..10`)
 
-Algoritam koristi:
-- historiju korisnika: samo rezervacije sa statusom `Completed`
-- aktivne parking lokacije (`IsActive = true`)
-- opcione koordinate korisnika (`latitude`, `longitude`) za distance boost
+## Input Data
 
-Ako korisnik nema nijednu zavrsenu rezervaciju, servis vraca prazan skup score-ova.
+The recommender uses:
+- user reservation history: only reservations with status `Completed`
+- user bookmarks (as weaker preference signal)
+- active parking locations (`IsActive = true`)
+- optional user coordinates (`lat`, `lon`) for proximity bonus
 
-## Signali i skor
+## Cold Start Behavior (No Completed Reservations)
 
-### 1) Preference iz historije korisnika
+If user has no completed reservations:
+- system falls back to top-rated active locations
+- ranking uses `AverageRating` descending
+- up to `count` results returned
+- response still includes explainability text:
+  - `CbfExplanation = "Highly rated in your selected city"`
 
-Iz lokacija koje je korisnik ranije koristio izracunavaju se prosjecne preferencije za:
+## Scoring Model (Has History)
+
+### 1) User Preference Profile
+
+Profile is built from:
+- completed reservation locations (weight `1.0`)
+- bookmarked locations (weight `0.5`)
+
+Weighted averages are computed for:
 - `HasVideoSurveillance`
 - `HasNightSurveillance`
-- disabled mjesta (preko aktivnih spotova tipa `Disabled`)
+- disabled spot availability (`SpotType == "Disabled"` and active)
 - `HasRamp`
 - `Is24Hours`
 - `HasOnlinePayment`
-- electric punjenje (aktivni spotovi tipa `Electric`)
-- covered mjesta (aktivni spotovi tipa `Covered`)
+- electric charging availability (`SpotType == "Electric"` and active)
+- covered spot availability (`SpotType == "Covered"` and active)
 - `HasSecurityGuard`
 - `HasWifi`
 - `HasRestroom`
 - `HasAttendant`
-- prosjecna cijena (`PricePerHour`)
+- average `PricePerHour`
 
-### 2) Match score po lokaciji
+### 2) Candidate Location Score
 
-Za svaku aktivnu lokaciju:
-- svaki feature-match nosi `+0.08` (12 feature-a)
-- similarity cijene nosi do `+0.20`
-- rezultat se normalizuje i ogranicava na `[0, 1]`
+For each active candidate location:
+- feature similarity: up to `12 * 0.06 = 0.72`
+- price similarity: up to `0.15`
+- rating component: `(AverageRating / 5.0) * 0.13`
+- distance bonus (if `lat/lon` provided):
+  - `<= 2 km`: `+0.12`
+  - `<= 5 km`: `+0.07`
+  - `<= 10 km`: `+0.03`
+  - `> 10 km`: `+0`
 
-### 3) Distance faktor (opciono)
+Final score is clamped to `[0, 1]`, then converted to percent in DTO:
+- `CbfScore = round(score * 100)`
 
-Ako su poslane koordinate korisnika:
-- racuna se Haversine udaljenost
-- blize lokacije dobijaju dodatni boost do `+0.16`
-- za 10+ km distance boost je 0
-- finalni skor ostaje ogranicen na `[0, 1]`
+## Explainability
 
-## Izlaz
+API response includes text explanation in `CbfExplanation`.
+Possible reasons include:
+- `Price fits your preference`
+- `Highly rated (...)` / `Well rated (...)` / `Rated (...)`
+- `Very close to you` / `Near you`
+- `You bookmarked a similar location`
+- `Has <feature1>, <feature2>`
 
-Endpoint vraca mapu:
-- `key`: `ParkingLocationId`
-- `value`: decimalni recommendation score (`0.0 - 1.0`)
+## Output Shape
 
-Napomena: trenutna implementacija ne vraca textual explanation (`reasons`), vec samo score.
+Endpoint returns `List<ParkingLocation>` where each item includes:
+- location data
+- `CbfScore` (0-100)
+- `CbfExplanation` (human-readable reason text)
 
-## Persistencija i treniranje modela
+## Notes
 
-Nema zasebnog ML modela niti offline treniranja.
-Recommender se racuna on-demand direktno iz produkcionih tabela:
-- `Reservations`
-- `ParkingSpots`
-- `ParkingLocations`
-
-## Ogranicenja trenutne implementacije
-
-- nema cold-start fallback rankinga (npr. popularnost) kada korisnik nema historiju
-- nema explainability payload-a u API odgovoru
-- nema perzistencije preporuka; score se racuna pri svakom pozivu
+- This is not offline ML training; score is computed on-demand from relational data.
+- Main data sources: `Reservations`, `Bookmarks`, `ParkingLocations`, `ParkingSpots`.
+- Recommendation count is consumer-configurable via `count` query param.

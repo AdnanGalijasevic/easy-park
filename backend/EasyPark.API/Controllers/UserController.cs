@@ -47,32 +47,15 @@ namespace EasyPark.API.Controllers
         [AllowAnonymous]
         public IActionResult Login([FromBody] LoginRequest request)
         {
-            var user = _service.Login(request.username, request.password);
-
-            var clientTypeRaw = Request.Headers["X-Client-Type"].ToString();
-            var clientType = clientTypeRaw?.Trim().ToLower();
-
-            if (string.IsNullOrEmpty(clientType) || (clientType != "desktop" && clientType != "mobile"))
-            {
-                return BadRequest(new { message = "Invalid or missing 'X-Client-Type' header. Must be 'desktop' or 'mobile'." });
-            }
-
-            if (clientType == "desktop" && !user.Roles.Contains("Admin"))
-            {
-                return Unauthorized(new { message = "Only admins can log in from the desktop app." });
-            }
-
-            if (clientType == "mobile" && user.Roles.Contains("Admin"))
-            {
-                return Unauthorized(new { message = "Admins cannot log in from the mobile app." });
-            }
+            var clientType = Request.Headers["X-Client-Type"].ToString();
+            var user = _service.Login(request.username, request.password, clientType);
 
             var authResponse = _tokenSecurityService.CreateAuthResponse(user);
             return Ok(authResponse);
         }
 
-        [HttpPost("refresh")]
         [AllowAnonymous]
+        [HttpPost("refresh")]
         public IActionResult Refresh([FromBody] TokenRefreshRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.RefreshToken))

@@ -119,7 +119,6 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
         'description': _descriptionController.text.trim().isEmpty
             ? null
             : _descriptionController.text.trim(),
-        // totalSpots is NOT sent - it is calculated automatically from ParkingSpots in backend
         'pricePerHour': double.parse(_pricePerHourController.text),
         'pricePerDay': _pricePerDayController.text.trim().isEmpty
             ? null
@@ -175,8 +174,14 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
                     labelText: 'Name *',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) =>
-                      value == null || value.isEmpty ? 'Required' : null,
+                  validator: (value) {
+                    final raw = value?.trim() ?? '';
+                    if (raw.isEmpty) return 'Location name is required.';
+                    if (raw.length < 2) {
+                      return 'Location name must be at least 2 characters.';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -185,8 +190,11 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
                     labelText: 'Address *',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) =>
-                      value == null || value.isEmpty ? 'Required' : null,
+                  validator: (value) {
+                    final raw = value?.trim() ?? '';
+                    if (raw.isEmpty) return 'Address is required.';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -198,8 +206,11 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
                           labelText: 'City *',
                           border: OutlineInputBorder(),
                         ),
-                        validator: (value) =>
-                            value == null || value.isEmpty ? 'Required' : null,
+                        validator: (value) {
+                          final raw = value?.trim() ?? '';
+                          if (raw.isEmpty) return 'City is required.';
+                          return null;
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -236,8 +247,18 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        validator: (value) =>
-                            value == null || value.isEmpty ? 'Required' : null,
+                        validator: (value) {
+                          final raw = value?.trim() ?? '';
+                          if (raw.isEmpty) return 'Hourly price is required.';
+                          final parsed = double.tryParse(raw);
+                          if (parsed == null) {
+                            return 'Enter a valid hourly price.';
+                          }
+                          if (parsed < 0) {
+                            return 'Hourly price cannot be negative.';
+                          }
+                          return null;
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),

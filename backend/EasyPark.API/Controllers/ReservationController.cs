@@ -45,10 +45,14 @@ namespace EasyPark.API.Controllers
         }
 
         [HttpPut("{id}/cancel")]
-        public Reservation Cancel(int id)
+        public Reservation Cancel(int id, [FromBody] CancelReasonRequest? request = null)
         {
-            var request = new ReservationUpdateRequest { Status = "Cancelled" };
-            return _service.Update(id, request);
+            var updateRequest = new ReservationUpdateRequest
+            {
+                Status = "Cancelled",
+                CancellationReason = request?.Reason
+            };
+            return _service.Update(id, updateRequest);
         }
 
         [Authorize(Roles = "Admin")]
