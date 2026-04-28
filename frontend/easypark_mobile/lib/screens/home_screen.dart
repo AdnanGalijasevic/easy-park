@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:easypark_mobile/providers/parking_location_provider.dart';
 import 'package:easypark_mobile/providers/shell_navigation_provider.dart';
-import 'package:easypark_mobile/services/marker_service.dart';
 import 'package:easypark_mobile/models/parking_location.dart';
 import 'package:easypark_mobile/widgets/location_card.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
@@ -17,8 +18,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  GoogleMapController? _mapController;
-  ParkingLocation? _pendingLocForMap;
+  final MapController _mapController = MapController();
+  bool _isLocatingUser = false;
+  LatLng? _userLocation;
+  String? _lastAutoCenteredCity;
 
   @override
   void initState() {
@@ -32,9 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  static const LatLng _defaultMapCenter = LatLng(43.9159, 17.6791);
-
-  final MarkerService _markerService = MarkerService();
+  static final LatLng _defaultMapCenter = LatLng(43.9159, 17.6791);
 
   Map<String, LatLng> _buildCityCenters(
     List<ParkingLocation> locations,
@@ -86,20 +87,71 @@ class _HomeScreenState extends State<HomeScreen> {
     provider.loadData(search: {'City': newCity});
     final target = cityCenters[newCity];
     if (target == null) return;
-    _mapController?.animateCamera(CameraUpdate.newLatLngZoom(target, 14.0));
+    _lastAutoCenteredCity = newCity;
+    _mapController.move(target, 14.0);
+  }
+
+  void _syncMapCenterForSelectedCity(
+    String selectedCity,
+    Map<String, LatLng> cityCenters,
+  ) {
+    final target = cityCenters[selectedCity];
+    if (target == null) return;
+    if (_lastAutoCenteredCity == selectedCity) return;
+    _lastAutoCenteredCity = selectedCity;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mapController.move(target, 14.0);
+    });
   }
 
   void _animateCameraTo(ParkingLocation location) {
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(location.latitude, location.longitude),
-        17.0,
-      ),
-    );
+    _mapController.move(LatLng(location.latitude, location.longitude), 17.0);
   }
 
   void _focusMapOnLocation(ParkingLocation location) {
     _animateCameraTo(location);
+  }
+
+  Future<void> _moveToCurrentLocation() async {
+    if (_isLocatingUser) return;
+    setState(() => _isLocatingUser = true);
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        AppFeedback.info('Enable location services to center map on your position.');
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        AppFeedback.info('Location permission is required to use this action.');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      final userPoint = LatLng(position.latitude, position.longitude);
+      if (mounted) {
+        setState(() => _userLocation = userPoint);
+      }
+      _mapController.move(userPoint, 16.0);
+    } catch (e) {
+      AppFeedback.error('Could not fetch current location.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLocatingUser = false);
+      }
+    }
   }
 
   void _tryApplyShellFocus() {
@@ -133,17 +185,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final selected = loc;
     parking.selectLocation(selected);
 
-    if (_mapController != null) {
-      _animateCameraTo(selected);
-    } else {
-      _pendingLocForMap = selected;
-    }
+    _animateCameraTo(selected);
   }
 
-  Future<Set<Marker>> _createMarkers(
+  List<Marker> _createMarkers(
     List<ParkingLocation> locations,
     ParkingLocationProvider provider,
-  ) async {
+  ) {
     final markers = <Marker>[];
 
     final optimalId = provider.optimalRecommendationLocationId;
@@ -164,24 +212,71 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final isOptimal = optimalId != null && optimalId == loc.id;
 
-      final icon = await _markerService.createCustomMarkerBitmap(
-        loc.priceRegular.toString(),
-        markerColor,
-        isOptimal: isOptimal,
-      );
-
       markers.add(
         Marker(
-          markerId: MarkerId(loc.id.toString()),
-          position: LatLng(loc.latitude, loc.longitude),
-          icon: icon,
-          anchor: const Offset(0.5, 1.0),
-          onTap: () => provider.selectLocation(loc),
+          key: ValueKey('parking_marker_${loc.id}'),
+          point: LatLng(loc.latitude, loc.longitude),
+          width: 112,
+          height: 68,
+          alignment: Alignment.topCenter,
+          child: GestureDetector(
+            onTap: () => provider.selectLocation(loc),
+            child: _buildMarkerChip(
+              label: loc.priceRegular.toString(),
+              color: markerColor,
+              isOptimal: isOptimal,
+            ),
+          ),
         ),
       );
     }
 
-    return markers.toSet();
+    return markers;
+  }
+
+  Widget _buildMarkerChip({
+    required String label,
+    required Color color,
+    required bool isOptimal,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(20),
+            border: isOptimal
+                ? Border.all(
+                    color: EasyParkColors.mapMarkerOptimalBorder,
+                    width: 2,
+                  )
+                : null,
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x40000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: EasyParkColors.onAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        Icon(
+          Icons.arrow_drop_down,
+          size: 22,
+          color: color,
+        ),
+      ],
+    );
   }
 
   @override
@@ -194,6 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final effectiveSelectedCity = cityNames.contains(mapCity)
         ? mapCity
         : (cityNames.isNotEmpty ? cityNames.first : mapCity);
+    _syncMapCenterForSelectedCity(effectiveSelectedCity, cityCenters);
 
     if (shell.pendingParkingLocationIdToFocus != null && !provider.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _tryApplyShellFocus());
@@ -280,30 +376,71 @@ class _HomeScreenState extends State<HomeScreen> {
             flex: 4,
             child: provider.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : FutureBuilder<Set<Marker>>(
-                    future: _createMarkers(provider.items, provider),
-                    builder: (context, snapshot) {
-                      return GoogleMap(
-                        initialCameraPosition: CameraPosition(
-                          target:
+                : Stack(
+                    children: [
+                      FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter:
                               cityCenters[effectiveSelectedCity] ??
                               _defaultMapCenter,
-                          zoom: 14.0,
+                          initialZoom: 14.0,
                         ),
-                        onMapCreated: (c) {
-                          _mapController = c;
-                          if (_pendingLocForMap != null) {
-                            final loc = _pendingLocForMap!;
-                            _pendingLocForMap = null;
-                            _animateCameraTo(loc);
-                          }
-                        },
-                        markers: snapshot.data ?? {},
-                        myLocationEnabled: true,
-                        myLocationButtonEnabled: true,
-                        zoomControlsEnabled: false,
-                      );
-                    },
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.easypark_mobile',
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              ..._createMarkers(provider.items, provider),
+                              if (_userLocation != null)
+                                Marker(
+                                  key: const ValueKey('user_location_marker'),
+                                  point: _userLocation!,
+                                  width: 20,
+                                  height: 20,
+                                  alignment: Alignment.center,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: EasyParkColors.info,
+                                      border: Border.all(
+                                        color: EasyParkColors.onAccent,
+                                        width: 3,
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x40000000),
+                                          blurRadius: 6,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: FloatingActionButton.small(
+                          heroTag: 'home_map_locate_me_btn',
+                          onPressed: _moveToCurrentLocation,
+                          backgroundColor: EasyParkColors.onAccent,
+                          foregroundColor: EasyParkColors.surface,
+                          child: _isLocatingUser
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.my_location),
+                        ),
+                      ),
+                    ],
                   ),
           ),
           Expanded(

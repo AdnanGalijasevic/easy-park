@@ -160,6 +160,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     final required = InputValidators.requiredText(v, 'Username');
                     if (required != null) return required;
                     final username = v!.trim();
+                    if (!RegExp(r'^[A-Za-z0-9_]+$').hasMatch(username)) {
+                      return 'Use only letters, numbers, and underscore.';
+                    }
                     if (username.length < 3) return 'Min 3 characters';
                     if (username.length > 20) return 'Max 20 characters';
                     return null;

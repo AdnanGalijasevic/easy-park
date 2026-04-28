@@ -21,14 +21,12 @@ The app resolves API URL in this order:
 Optional Stripe key in `.env` or `assets/config.env`:
 
 - `STRIPE_PUBLISHABLE_KEY=...`
-- `GOOGLE_MAPS_API_KEY=...` (required for map tiles/places features)
 
 Example `assets/config.env`:
 
 ```env
 API_BASE=http://192.168.1.5:8080
 STRIPE_PUBLISHABLE_KEY=pk_test_xxx
-GOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
 ## Install dependencies
@@ -61,3 +59,4 @@ flutter run -d chrome --dart-define=API_BASE=http://127.0.0.1:8080
 
 - If backend runs in Docker, keep API port `8080` exposed.
 - Deep-link payment return handling is wired in `lib/main.dart`.
+- Maps use OpenStreetMap tiles through `flutter_map`, so no Google Maps API key is required.
