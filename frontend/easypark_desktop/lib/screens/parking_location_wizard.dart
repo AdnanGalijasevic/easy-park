@@ -386,10 +386,19 @@ class _ParkingLocationWizardScreenState
 
     setState(() => _isLoading = true);
     try {
+      final prefix = switch (spotType) {
+        'Regular' => 'R',
+        'Disabled' => 'D',
+        'Electric' => 'E',
+        'Covered' => 'C',
+        _ => 'S',
+      };
+      final seed = DateTime.now().millisecondsSinceEpoch % 100000;
       for (int i = 1; i <= count; i++) {
+        final spotNumber = '$prefix-$seed-$i';
         final spot = {
           'parkingLocationId': _createdLocationId,
-          'spotNumber': '$spotType-${DateTime.now().millisecondsSinceEpoch}-$i',
+          'spotNumber': spotNumber,
           'spotType': spotType,
           'isActive': true,
         };

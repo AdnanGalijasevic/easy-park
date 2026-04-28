@@ -129,11 +129,20 @@ abstract class BaseProvider<T> with ChangeNotifier {
           http.put(uri, headers: refreshedHeaders, body: jsonRequest),
     );
 
-    if (isValidResponse(response)) {
-      var data = jsonDecode(response.body);
-      return fromJson(data);
-    } else {
+    try {
+      if (isValidResponse(response)) {
+        var data = jsonDecode(response.body);
+        return fromJson(data);
+      }
       throw Exception('Unknown error');
+    } catch (_) {
+      _debugLogHttpFailure(
+        method: 'PUT',
+        url: url,
+        requestBody: jsonRequest,
+        response: response,
+      );
+      rethrow;
     }
   }
 
@@ -170,6 +179,17 @@ abstract class BaseProvider<T> with ChangeNotifier {
         'Failed to process response. Please check your connection and try again.',
       );
     }
+  }
+
+  void _debugLogHttpFailure({
+    required String method,
+    required String url,
+    required String requestBody,
+    required Response response,
+  }) {
+    debugPrint('[$method] $url failed with ${response.statusCode}');
+    debugPrint('[$method] request body: $requestBody');
+    debugPrint('[$method] response body: ${response.body}');
   }
 
   Map<String, String> createHeaders() {

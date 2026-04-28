@@ -36,6 +36,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isChangingPassword = false;
   bool _didAttemptProfileSave = false;
 
+  List<String> _resolvedRoles = const [];
+
   @override
   void initState() {
     super.initState();
@@ -110,11 +112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       null;
 
   bool get _isProfilePhoneValid =>
-      phone(
-        _phoneController.text.trim(),
-        'Enter 8-15 digits, optional + prefix.',
-      ) ==
-      null;
+      _validatePhoneForBackend(_phoneController.text.trim()) == null;
 
   bool get _canSaveProfile =>
       !_isSavingProfile &&
@@ -129,13 +127,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
     try {
       final user = await _userProvider.getCurrentUser();
-      final isAdmin = user.roles.any((r) => r.toLowerCase() == 'admin');
+      final hasAdminRoleFromUser = user.roles.any(
+        (r) => r.toLowerCase() == 'admin',
+      );
+      final hasAdminRoleFromToken = AuthProvider.hasAdminRoleInAccessToken();
+      final isAdmin = hasAdminRoleFromUser || hasAdminRoleFromToken;
       if (!isAdmin) {
-        await AuthProvider.clearCredentials();
         throw Exception('Access denied. Desktop app is available to admins only.');
       }
       if (!mounted) return;
       _currentUser = user;
+      _resolvedRoles = hasAdminRoleFromUser
+          ? user.roles
+          : const ['Admin'];
       _firstNameController.text = user.firstName;
       _lastNameController.text = user.lastName;
       _usernameController.text = user.username;
@@ -155,6 +159,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isSavingProfile = true);
     try {
+      final normalizedPhone = _normalizePhoneForBackend(
+        _phoneController.text.trim(),
+      );
+      final formattedBirthDate = _formatBirthDateForBackend(
+        _currentUser!.birthDate,
+      );
       final updated = await _userProvider.update(
         _currentUser!.id,
         {
@@ -162,8 +172,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'lastName': _lastNameController.text.trim(),
           'username': _usernameController.text.trim(),
           'email': _emailController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'birthDate': _currentUser!.birthDate.toIso8601String(),
+          'phone': normalizedPhone,
+          'birthDate': formattedBirthDate,
         },
       );
       if (!mounted) return;
@@ -182,6 +192,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isChangingPassword = true);
     try {
+      final normalizedPhone = _normalizePhoneForBackend(
+        (_currentUser!.phone ?? '').trim(),
+      );
+      final formattedBirthDate = _formatBirthDateForBackend(
+        _currentUser!.birthDate,
+      );
       await _userProvider.update(
         _currentUser!.id,
         {
@@ -189,8 +205,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'lastName': _currentUser!.lastName,
           'username': _currentUser!.username,
           'email': _currentUser!.email,
-          'phone': _currentUser!.phone,
-          'birthDate': _currentUser!.birthDate.toIso8601String(),
+          'phone': normalizedPhone,
+          'birthDate': formattedBirthDate,
           'currentPassword': _currentPasswordController.text,
           'newPassword': _newPasswordController.text,
           'newPasswordConfirm': _confirmPasswordController.text,
@@ -216,6 +232,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (required != null) return required;
     if (value != _newPasswordController.text) {
       return 'Password confirmation does not match.';
+    }
+    return null;
+  }
+
+  String _normalizePhoneForBackend(String value) {
+    return value.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  String _formatBirthDateForBackend(DateTime value) {
+    final yyyy = value.year.toString().padLeft(4, '0');
+    final mm = value.month.toString().padLeft(2, '0');
+    final dd = value.day.toString().padLeft(2, '0');
+    return '$yyyy-$mm-$dd';
+  }
+
+  String? _validatePhoneForBackend(String value) {
+    final required = inputRequired(value, 'Phone number is required.');
+    if (required != null) return required;
+
+    final normalized = _normalizePhoneForBackend(value);
+    if (normalized.length < 9 || normalized.length > 10) {
+      return 'Phone number must have 9-10 digits.';
     }
     return null;
   }
@@ -287,7 +325,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
-                              initialValue: _currentUser?.roles.join(', ') ?? '',
+                              initialValue: _resolvedRoles.join(', '),
                               decoration: const InputDecoration(
                                 labelText: 'Role',
                               ),
@@ -353,13 +391,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               controller: _phoneController,
                               decoration: const InputDecoration(
                                 labelText: 'Phone',
-                                helperText: 'Format: +38761111222',
+                                helperText: 'Use 9-10 digits (numbers only).',
                               ),
-                              validator: (v) => inputRequired(
-                                    v,
-                                    'Phone number is required.',
-                                  ) ??
-                                  phone(v, 'Enter 8-15 digits, optional + prefix.'),
+                              validator: (v) =>
+                                  _validatePhoneForBackend((v ?? '').trim()),
                             ),
                             const SizedBox(height: 16),
                             Align(

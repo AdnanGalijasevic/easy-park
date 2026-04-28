@@ -16,7 +16,7 @@ class _RevenueChartState extends State<RevenueChart> {
   static const _days = 30;
 
   bool _isRevenueStatus(String status) {
-    return status != 'Cancelled' && status != 'Expired';
+    return status != 'Cancelled';
   }
 
   @override

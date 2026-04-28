@@ -64,21 +64,53 @@ class AuthProvider {
       final payload = utf8.decode(base64Url.decode(normalized));
       final Map<String, dynamic> claims = jsonDecode(payload);
 
-      final roleClaim = claims['role'] ?? claims['roles'];
+      final roleCandidates = <dynamic>[
+        claims['role'],
+        claims['roles'],
+        claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'],
+      ];
 
-      if (roleClaim is String) {
-        return roleClaim.toLowerCase() == 'admin';
-      }
+      for (final roleClaim in roleCandidates) {
+        if (roleClaim is String &&
+            roleClaim.trim().toLowerCase() == 'admin') {
+          return true;
+        }
 
-      if (roleClaim is List) {
-        return roleClaim.any(
-          (entry) => entry.toString().toLowerCase() == 'admin',
-        );
+        if (roleClaim is List &&
+            roleClaim.any(
+              (entry) => entry.toString().trim().toLowerCase() == 'admin',
+            )) {
+          return true;
+        }
       }
 
       return false;
     } catch (_) {
       return false;
+    }
+  }
+
+  static int? getUserIdFromAccessToken() {
+    final token = accessToken;
+    if (token == null || token.isEmpty) return null;
+
+    final parts = token.split('.');
+    if (parts.length < 2) return null;
+
+    try {
+      final normalized = base64Url.normalize(parts[1]);
+      final payload = utf8.decode(base64Url.decode(normalized));
+      final Map<String, dynamic> claims = jsonDecode(payload);
+
+      final claim =
+          claims['UserId'] ??
+          claims['nameid'] ??
+          claims['sub'] ??
+          claims['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+      if (claim == null) return null;
+      return int.tryParse(claim.toString());
+    } catch (_) {
+      return null;
     }
   }
 }

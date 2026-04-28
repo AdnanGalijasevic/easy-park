@@ -88,7 +88,7 @@ namespace EasyPark.Services.Services
             }
 
             var reservations = Context.Reservations
-                .Where(r => r.Status == ReservationStatus.Completed &&
+                .Where(r => IsIncludedInReportMetrics(r.Status) &&
                            r.StartTime >= request.PeriodStart &&
                            r.EndTime <= request.PeriodEnd);
 
@@ -97,22 +97,10 @@ namespace EasyPark.Services.Services
                 reservations = reservations.Where(r => r.ParkingSpot.ParkingLocationId == request.ParkingLocationId.Value);
             }
 
-            var completedReservations = reservations.ToList();
-            var transactions = Context.Transactions
-                .Where(t => t.Status == TransactionStatus.Completed &&
-                           t.CreatedAt >= request.PeriodStart &&
-                           t.CreatedAt <= request.PeriodEnd);
+            var completedOrExpiredReservations = reservations.ToList();
 
-            if (request.ParkingLocationId.HasValue)
-            {
-                transactions = transactions.Where(t => t.Reservation != null &&
-                                                     t.Reservation.ParkingSpot.ParkingLocationId == request.ParkingLocationId.Value);
-            }
-
-            var completedTransactions = transactions.ToList();
-
-            entity.TotalRevenue = completedTransactions.Sum(t => t.Amount);
-            entity.TotalReservations = completedReservations.Count;
+            entity.TotalRevenue = completedOrExpiredReservations.Sum(r => r.TotalPrice);
+            entity.TotalReservations = completedOrExpiredReservations.Count;
 
             if (request.ParkingLocationId.HasValue)
             {
@@ -185,21 +173,21 @@ namespace EasyPark.Services.Services
             var end = start.AddMonths(1);
             var daysInMonth = DateTime.DaysInMonth(year, month);
 
-            var monthRevenue = Context.Transactions.AsNoTracking()
-                .Where(t => t.Status == TransactionStatus.Completed && t.CreatedAt >= start && t.CreatedAt < end)
-                .Sum(t => (decimal?)t.Amount) ?? 0m;
+            var monthRevenue = Context.Reservations.AsNoTracking()
+                .Where(r => IsIncludedInReportMetrics(r.Status) && r.StartTime >= start && r.StartTime < end)
+                .Sum(r => (decimal?)r.TotalPrice) ?? 0m;
 
             var monthReservations = Context.Reservations.AsNoTracking()
-                .Count(r => r.Status == ReservationStatus.Completed && r.StartTime >= start && r.StartTime < end);
+                .Count(r => IsIncludedInReportMetrics(r.Status) && r.StartTime >= start && r.StartTime < end);
 
-            var revenueByDay = Context.Transactions.AsNoTracking()
-                .Where(t => t.Status == TransactionStatus.Completed && t.CreatedAt >= start && t.CreatedAt < end)
-                .GroupBy(t => t.CreatedAt.Day)
-                .Select(g => new { Day = g.Key, Revenue = g.Sum(t => t.Amount) })
+            var revenueByDay = Context.Reservations.AsNoTracking()
+                .Where(r => IsIncludedInReportMetrics(r.Status) && r.StartTime >= start && r.StartTime < end)
+                .GroupBy(r => r.StartTime.Day)
+                .Select(g => new { Day = g.Key, Revenue = g.Sum(r => r.TotalPrice) })
                 .ToDictionary(x => x.Day, x => x.Revenue);
 
             var reservationsByDay = Context.Reservations.AsNoTracking()
-                .Where(r => r.Status == ReservationStatus.Completed && r.StartTime >= start && r.StartTime < end)
+                .Where(r => IsIncludedInReportMetrics(r.Status) && r.StartTime >= start && r.StartTime < end)
                 .GroupBy(r => r.StartTime.Day)
                 .Select(g => new { Day = g.Key, Count = g.Count() })
                 .ToDictionary(x => x.Day, x => x.Count);
@@ -215,6 +203,11 @@ namespace EasyPark.Services.Services
 
             return AdminMonthlyReportPdfDocument.Generate(year, month, points, monthRevenue, monthReservations,
                 DateTime.UtcNow, graphsOnly);
+        }
+
+        private static bool IsIncludedInReportMetrics(string status)
+        {
+            return status != ReservationStatus.Cancelled;
         }
     }
 }

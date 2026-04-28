@@ -28,17 +28,11 @@ class UserProvider extends BaseProvider<User> {
   );
 
   Future<User> getCurrentUser() async {
-    final username = AuthProvider.username;
-    if (username == null || username.trim().isEmpty) {
+    final userId = AuthProvider.getUserIdFromAccessToken();
+    if (userId == null || userId <= 0) {
       throw Exception('No active session.');
     }
-
-    final result = await get(filter: {'fts': username.trim()}, page: 0, pageSize: 20);
-    final candidates = result.result.where((u) => u.username == username).toList();
-    if (candidates.isNotEmpty) return candidates.first;
-
-    if (result.result.isNotEmpty) return result.result.first;
-    throw Exception('Current user profile not found.');
+    return getById(userId);
   }
 
   static Future<void> logout() => AuthProvider.clearCredentials();

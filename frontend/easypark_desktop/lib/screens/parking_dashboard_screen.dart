@@ -44,6 +44,10 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
   List<Reservation> _reservations = [];
   bool _isLoadingReservations = true;
 
+  bool _isIncludedInReportMetrics(String status) {
+    return status != 'Cancelled';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -148,7 +152,7 @@ class _ParkingDashboardScreenState extends State<ParkingDashboardScreen> {
           )
           .toList();
       final completedRevenue = monthReservations
-          .where((r) => r.status == 'Completed')
+          .where((r) => _isIncludedInReportMetrics(r.status))
           .fold<double>(0, (sum, r) => sum + r.totalPrice);
 
       final totalHours = monthReservations.fold<double>(

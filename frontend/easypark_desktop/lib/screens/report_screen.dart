@@ -28,6 +28,10 @@ class _ReportScreenState extends State<ReportScreen> {
   double _totalRevenue = 0;
   int _totalReservations = 0;
 
+  bool _isIncludedInReportMetrics(String status) {
+    return status != 'Cancelled';
+  }
+
   DateTime _pdfMonth = DateTime(DateTime.now().year, DateTime.now().month);
   bool _pdfGraphsOnly = false;
   bool _pdfExporting = false;
@@ -149,7 +153,7 @@ class _ReportScreenState extends State<ReportScreen> {
       );
 
       final status = reservation.status;
-      if (status != 'Cancelled' && status != 'Expired') {
+      if (_isIncludedInReportMetrics(status)) {
         buckets[key]!['totalRevenue'] =
             (buckets[key]!['totalRevenue'] as double) + reservation.totalPrice;
         buckets[key]!['totalReservations'] =
