@@ -3,6 +3,20 @@ import 'package:easypark_mobile/models/parking_location.dart';
 import 'package:easypark_mobile/providers/base_provider.dart';
 import 'package:easypark_mobile/services/parking_location_service.dart';
 
+/// API query keys for [ParkingLocationProvider.locationSearch] (PascalCase for ASP.NET query binding).
+abstract final class ParkingLocationSearchKeys {
+  static const hasVideoSurveillance = 'HasVideoSurveillance';
+  static const hasNightSurveillance = 'HasNightSurveillance';
+  static const hasSecurityGuard = 'HasSecurityGuard';
+  static const hasRamp = 'HasRamp';
+  static const hasWifi = 'HasWifi';
+  static const hasRestroom = 'HasRestroom';
+  static const hasDisabledSpots = 'HasDisabledSpots';
+  static const is24Hours = 'Is24Hours';
+  static const hasElectricCharging = 'HasElectricCharging';
+  static const hasCoveredSpots = 'HasCoveredSpots';
+}
+
 class ParkingLocationProvider extends BaseProvider<ParkingLocation> {
   ParkingLocationProvider() : super(ParkingLocationService());
 
@@ -10,11 +24,47 @@ class ParkingLocationProvider extends BaseProvider<ParkingLocation> {
   String _homeMapCity = 'Mostar';
   String get homeMapCity => _homeMapCity;
 
+  /// Active list filters: when a key is present, API gets `Key=true` (must match).
+  final Set<String> _locationFilterKeys = {};
+  Set<String> get locationFilterKeys => Set.unmodifiable(_locationFilterKeys);
+  int get activeLocationFilterCount => _locationFilterKeys.length;
+
   void setHomeMapCity(String city) {
     if (_homeMapCity == city) return;
     _homeMapCity = city;
     notifyListeners();
   }
+
+  /// `City` plus any `Has*` / `Is*` filters (online payment & attendant excluded from UI).
+  Map<String, dynamic> buildLocationSearch() {
+    final m = <String, dynamic>{'City': _homeMapCity};
+    for (final k in _locationFilterKeys) {
+      m[k] = true;
+    }
+    return m;
+  }
+
+  Future<void> reloadParkingLocations() =>
+      loadData(search: buildLocationSearch());
+
+  Future<void> setLocationFilter(String apiKey, bool require) async {
+    if (require) {
+      _locationFilterKeys.add(apiKey);
+    } else {
+      _locationFilterKeys.remove(apiKey);
+    }
+    notifyListeners();
+    await loadData(search: buildLocationSearch());
+  }
+
+  Future<void> clearLocationFilters() async {
+    if (_locationFilterKeys.isEmpty) return;
+    _locationFilterKeys.clear();
+    notifyListeners();
+    await loadData(search: buildLocationSearch());
+  }
+
+  bool hasLocationFilter(String apiKey) => _locationFilterKeys.contains(apiKey);
 
   ParkingLocation? _selectedLocation;
   ParkingLocation? get selectedLocation => _selectedLocation;

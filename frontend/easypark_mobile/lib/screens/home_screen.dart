@@ -7,6 +7,7 @@ import 'package:easypark_mobile/providers/parking_location_provider.dart';
 import 'package:easypark_mobile/providers/shell_navigation_provider.dart';
 import 'package:easypark_mobile/models/parking_location.dart';
 import 'package:easypark_mobile/widgets/location_card.dart';
+import 'package:easypark_mobile/widgets/parking_location_filters_bar.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
 import 'package:easypark_mobile/utils/app_feedback.dart';
 
@@ -29,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final parking = context.read<ParkingLocationProvider>();
-      parking.loadData(search: {'City': parking.homeMapCity});
+      parking.reloadParkingLocations();
       parking.loadCityCoordinates();
       parking.loadRecommendations(null);
     });
@@ -84,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (newCity == null) return;
     provider.setHomeMapCity(newCity);
     provider.selectLocation(null);
-    provider.loadData(search: {'City': newCity});
+    provider.reloadParkingLocations();
     final target = cityCenters[newCity];
     if (target == null) return;
     _lastAutoCenteredCity = newCity;
@@ -348,8 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                provider.loadData(search: {'City': effectiveSelectedCity}),
+            onPressed: () => provider.reloadParkingLocations(),
           ),
           Tooltip(
             message: provider.sortByRecommendation
@@ -488,9 +488,11 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Column(
-      children: [
-        Container(
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          const ParkingLocationFiltersBar(),
+          Container(
           padding: const EdgeInsets.all(16),
           color: EasyParkColors.surface,
           child: Row(
@@ -547,8 +549,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        Expanded(
-          child: ListView.builder(
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: displayLocations.length,
             itemBuilder: (context, index) {
               final loc = displayLocations[index];
@@ -578,8 +581,8 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

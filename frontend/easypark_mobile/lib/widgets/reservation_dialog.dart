@@ -8,7 +8,7 @@ import 'package:easypark_mobile/providers/review_provider.dart';
 import 'package:easypark_mobile/theme/easy_park_colors.dart';
 import 'package:easypark_mobile/utils/app_feedback.dart';
 
-/// Tabbed dialog with "Reserve" and "Reviews" tabs for a parking location.
+/// Tabbed dialog: reserve, reviews, and parking details for a location.
 class ReservationDialog extends StatefulWidget {
   final ParkingLocation location;
 
@@ -25,7 +25,7 @@ class _ReservationDialogState extends State<ReservationDialog>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         Provider.of<ReviewProvider>(
@@ -89,12 +89,15 @@ class _ReservationDialogState extends State<ReservationDialog>
                     ),
                     TabBar(
                       controller: _tabController,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
                       labelColor: EasyParkColors.onAccent,
                       unselectedLabelColor: EasyParkColors.onAccentMuted,
                       indicatorColor: EasyParkColors.onAccent,
                       tabs: const [
                         Tab(text: 'Reserve'),
                         Tab(text: 'Reviews'),
+                        Tab(text: 'Details'),
                       ],
                     ),
                   ],
@@ -106,6 +109,7 @@ class _ReservationDialogState extends State<ReservationDialog>
                   children: [
                     _ReserveTab(location: widget.location),
                     _ReviewsTab(location: widget.location),
+                    _ParkingDetailsTab(location: widget.location),
                   ],
                 ),
               ),
@@ -1284,6 +1288,146 @@ class _ReviewItem extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _ParkingDetailsTab extends StatelessWidget {
+  final ParkingLocation location;
+  const _ParkingDetailsTab({required this.location});
+
+  static Widget _heading(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8, top: 16),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: EasyParkColors.accent,
+          ),
+        ),
+      );
+
+  static Widget _amenityRow(String label, bool on) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              on ? Icons.check_circle : Icons.remove_circle_outline,
+              size: 18,
+              color: on ? EasyParkColors.success : EasyParkColors.muted,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: EasyParkColors.onBackground,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  static String _priceLine(String label, double v) =>
+      v > 0 ? '$label: ${v.toStringAsFixed(2)} Coins/hr' : '$label: —';
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = location;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        _heading('Address'),
+        Text(
+          loc.address,
+          style: const TextStyle(
+            color: EasyParkColors.onBackground,
+            fontSize: 14,
+          ),
+        ),
+        if (loc.description != null && loc.description!.trim().isNotEmpty) ...[
+          _heading('About'),
+          Text(
+            loc.description!,
+            style: const TextStyle(
+              color: EasyParkColors.onBackgroundMuted,
+              fontSize: 13,
+            ),
+          ),
+        ],
+        _heading('Hours & type'),
+        Text(
+          loc.is24Hours
+              ? 'Open 24 hours'
+              : (loc.operatingHours ?? 'Hours on request'),
+          style: const TextStyle(
+            color: EasyParkColors.onBackground,
+            fontSize: 13,
+          ),
+        ),
+        if (loc.parkingType != null && loc.parkingType!.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Type: ${loc.parkingType}',
+            style: const TextStyle(
+              color: EasyParkColors.onBackgroundMuted,
+              fontSize: 13,
+            ),
+          ),
+        ],
+        if (loc.maxVehicleHeight != null && loc.maxVehicleHeight! > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Max vehicle height: ${loc.maxVehicleHeight} m',
+            style: const TextStyle(
+              color: EasyParkColors.onBackgroundMuted,
+              fontSize: 13,
+            ),
+          ),
+        ],
+        _heading('Capacity'),
+        Text(
+          '${loc.totalSpots} total spots',
+          style: const TextStyle(
+            color: EasyParkColors.onBackground,
+            fontSize: 13,
+          ),
+        ),
+        _heading('Pricing'),
+        Text(
+          _priceLine('Regular', loc.priceRegular),
+          style: const TextStyle(color: EasyParkColors.onBackground, fontSize: 13),
+        ),
+        Text(
+          _priceLine('Disabled', loc.priceDisabled),
+          style: const TextStyle(color: EasyParkColors.onBackground, fontSize: 13),
+        ),
+        Text(
+          _priceLine('Electric', loc.priceElectric),
+          style: const TextStyle(color: EasyParkColors.onBackground, fontSize: 13),
+        ),
+        Text(
+          _priceLine('Covered', loc.priceCovered),
+          style: const TextStyle(color: EasyParkColors.onBackground, fontSize: 13),
+        ),
+        _heading('Spot types'),
+        _amenityRow('Disabled spots available', loc.hasDisabledSpots),
+        _amenityRow('Electric charging', loc.hasElectricCharging),
+        _amenityRow('Covered spots', loc.hasCoveredSpots),
+        _heading('Amenities & features'),
+        _amenityRow('Video surveillance', loc.hasVideoSurveillance),
+        _amenityRow('Night surveillance', loc.hasNightSurveillance),
+        _amenityRow('Security guard', loc.hasSecurityGuard),
+        _amenityRow('Ramp', loc.hasRamp),
+        _amenityRow('Online payment', loc.hasOnlinePayment),
+        _amenityRow('Wi‑Fi', loc.hasWifi),
+        _amenityRow('Restroom', loc.hasRestroom),
+        _amenityRow('Attendant', loc.hasAttendant),
       ],
     );
   }

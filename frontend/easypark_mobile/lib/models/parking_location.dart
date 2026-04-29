@@ -26,6 +26,17 @@ class ParkingLocation {
   final double? cbfScore;
   final String? cbfExplanation;
 
+  final bool hasVideoSurveillance;
+  final bool hasNightSurveillance;
+  final bool hasRamp;
+  final bool hasOnlinePayment;
+  final bool hasSecurityGuard;
+  final bool hasWifi;
+  final bool hasRestroom;
+  final bool hasAttendant;
+  final String? parkingType;
+  final double? maxVehicleHeight;
+
   ParkingLocation({
     required this.id,
     required this.name,
@@ -51,6 +62,16 @@ class ParkingLocation {
     this.parkingSpots,
     this.cbfScore,
     this.cbfExplanation,
+    this.hasVideoSurveillance = false,
+    this.hasNightSurveillance = false,
+    this.hasRamp = false,
+    this.hasOnlinePayment = false,
+    this.hasSecurityGuard = false,
+    this.hasWifi = false,
+    this.hasRestroom = false,
+    this.hasAttendant = false,
+    this.parkingType,
+    this.maxVehicleHeight,
   });
 
   factory ParkingLocation.fromJson(Map<String, dynamic> json) {
@@ -82,6 +103,16 @@ class ParkingLocation {
       parkingSpots: _parseSpots(json),
       cbfScore: (json['cbfScore'] as num?)?.toDouble(),
       cbfExplanation: json['cbfExplanation'] as String?,
+      hasVideoSurveillance: json['hasVideoSurveillance'] as bool? ?? false,
+      hasNightSurveillance: json['hasNightSurveillance'] as bool? ?? false,
+      hasRamp: json['hasRamp'] as bool? ?? false,
+      hasOnlinePayment: json['hasOnlinePayment'] as bool? ?? false,
+      hasSecurityGuard: json['hasSecurityGuard'] as bool? ?? false,
+      hasWifi: json['hasWifi'] as bool? ?? false,
+      hasRestroom: json['hasRestroom'] as bool? ?? false,
+      hasAttendant: json['hasAttendant'] as bool? ?? false,
+      parkingType: json['parkingType'] as String?,
+      maxVehicleHeight: (json['maxVehicleHeight'] as num?)?.toDouble(),
     );
   }
 
@@ -122,6 +153,16 @@ class ParkingLocation {
       'parkingSpots': parkingSpots?.map((e) => e.toJson()).toList(),
       'cbfScore': cbfScore,
       'cbfExplanation': cbfExplanation,
+      'hasVideoSurveillance': hasVideoSurveillance,
+      'hasNightSurveillance': hasNightSurveillance,
+      'hasRamp': hasRamp,
+      'hasOnlinePayment': hasOnlinePayment,
+      'hasSecurityGuard': hasSecurityGuard,
+      'hasWifi': hasWifi,
+      'hasRestroom': hasRestroom,
+      'hasAttendant': hasAttendant,
+      'parkingType': parkingType,
+      'maxVehicleHeight': maxVehicleHeight,
     };
   }
 }

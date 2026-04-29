@@ -190,6 +190,31 @@ namespace EasyPark.Services.Services
                 filteredQuery = filteredQuery.Where(x => x.HasVideoSurveillance == search.HasVideoSurveillance.Value);
             }
 
+            if (search.HasNightSurveillance.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(x => x.HasNightSurveillance == search.HasNightSurveillance.Value);
+            }
+
+            if (search.HasRamp.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(x => x.HasRamp == search.HasRamp.Value);
+            }
+
+            if (search.HasSecurityGuard.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(x => x.HasSecurityGuard == search.HasSecurityGuard.Value);
+            }
+
+            if (search.HasWifi.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(x => x.HasWifi == search.HasWifi.Value);
+            }
+
+            if (search.HasRestroom.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(x => x.HasRestroom == search.HasRestroom.Value);
+            }
+
             if (search.Is24Hours.HasValue)
             {
                 filteredQuery = filteredQuery.Where(x => x.Is24Hours == search.Is24Hours.Value);

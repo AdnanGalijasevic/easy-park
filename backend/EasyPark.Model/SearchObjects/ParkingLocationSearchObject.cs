@@ -14,6 +14,11 @@ namespace EasyPark.Model.SearchObjects
         public decimal? MaxPricePerHour { get; set; }
         public bool? IsActive { get; set; }
         public bool? HasVideoSurveillance { get; set; }
+        public bool? HasNightSurveillance { get; set; }
+        public bool? HasRamp { get; set; }
+        public bool? HasSecurityGuard { get; set; }
+        public bool? HasWifi { get; set; }
+        public bool? HasRestroom { get; set; }
         public bool? HasDisabledSpots { get; set; }
         public bool? Is24Hours { get; set; }
         public bool? HasOnlinePayment { get; set; }
