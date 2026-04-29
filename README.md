@@ -6,6 +6,8 @@ EasyPark consists of:
 - `frontend/easypark_desktop` (Flutter desktop admin app)
 - `frontend/easypark_mobile` (Flutter mobile client app)
 
+Project topic proposal is available in `RSII_IB220016.docx`.
+
 ## 1) Run backend (RSII-ready)
 
 Prerequisites:
