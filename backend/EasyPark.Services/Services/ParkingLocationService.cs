@@ -530,7 +530,7 @@ namespace EasyPark.Services.Services
         /// Content-Based Filtering (CBF) recommendation algorithm.
         /// Builds a user preference profile from completed reservations and bookmarks (bookmarks weighted 0.5×),
         /// then scores all active locations by:
-        ///   - Feature similarity: 12 boolean amenities × 0.06 each (max 0.72)
+        ///   - Feature similarity: 10 boolean amenities × 0.06 each (max 0.60)
         ///   - Price similarity: up to 0.15
         ///   - AverageRating: (rating/5) × 0.13
         ///   - Haversine distance bonus: up to 0.12 when lat/lon provided
@@ -610,13 +610,11 @@ namespace EasyPark.Services.Services
             var avgHasDisabledSpots = WeightedAvg(l => LocationHasActiveSpotType(l, "Disabled") ? 1.0m : 0.0m);
             var avgHasRamp = WeightedAvg(l => l.HasRamp ? 1.0m : 0.0m);
             var avgIs24Hours = WeightedAvg(l => l.Is24Hours ? 1.0m : 0.0m);
-            var avgHasOnlinePayment = WeightedAvg(l => l.HasOnlinePayment ? 1.0m : 0.0m);
             var avgHasElectricCharging = WeightedAvg(l => LocationHasActiveSpotType(l, "Electric") ? 1.0m : 0.0m);
             var avgHasCoveredSpots = WeightedAvg(l => LocationHasActiveSpotType(l, "Covered") ? 1.0m : 0.0m);
             var avgHasSecurityGuard = WeightedAvg(l => l.HasSecurityGuard ? 1.0m : 0.0m);
             var avgHasWifi = WeightedAvg(l => l.HasWifi ? 1.0m : 0.0m);
             var avgHasRestroom = WeightedAvg(l => l.HasRestroom ? 1.0m : 0.0m);
-            var avgHasAttendant = WeightedAvg(l => l.HasAttendant ? 1.0m : 0.0m);
 
             var allProfileLocations = userPreferredLocations.Concat(bookmarkedLocations).ToList();
             var avgPricePerHour = totalWeight == 0 ? 0.0
@@ -647,13 +645,11 @@ namespace EasyPark.Services.Services
                 if (Math.Abs((LocationHasActiveSpotType(location, "Disabled") ? 1.0m : 0.0m) - avgHasDisabledSpots) < 0.5m) { matchScore += 0.06m; if (LocationHasActiveSpotType(location, "Disabled")) matchedFeatures.Add("Disabled Spots"); }
                 if (Math.Abs((location.HasRamp ? 1.0m : 0.0m) - avgHasRamp) < 0.5m) { matchScore += 0.06m; if (location.HasRamp) matchedFeatures.Add("Ramp"); }
                 if (Math.Abs((location.Is24Hours ? 1.0m : 0.0m) - avgIs24Hours) < 0.5m) { matchScore += 0.06m; if (location.Is24Hours) matchedFeatures.Add("24h"); }
-                if (Math.Abs((location.HasOnlinePayment ? 1.0m : 0.0m) - avgHasOnlinePayment) < 0.5m) { matchScore += 0.06m; if (location.HasOnlinePayment) matchedFeatures.Add("Online Payment"); }
                 if (Math.Abs((LocationHasActiveSpotType(location, "Electric") ? 1.0m : 0.0m) - avgHasElectricCharging) < 0.5m) { matchScore += 0.06m; if (LocationHasActiveSpotType(location, "Electric")) matchedFeatures.Add("EV Charging"); }
                 if (Math.Abs((LocationHasActiveSpotType(location, "Covered") ? 1.0m : 0.0m) - avgHasCoveredSpots) < 0.5m) { matchScore += 0.06m; if (LocationHasActiveSpotType(location, "Covered")) matchedFeatures.Add("Covered Spots"); }
                 if (Math.Abs((location.HasSecurityGuard ? 1.0m : 0.0m) - avgHasSecurityGuard) < 0.5m) { matchScore += 0.06m; if (location.HasSecurityGuard) matchedFeatures.Add("Security Guard"); }
                 if (Math.Abs((location.HasWifi ? 1.0m : 0.0m) - avgHasWifi) < 0.5m) { matchScore += 0.06m; if (location.HasWifi) matchedFeatures.Add("WiFi"); }
                 if (Math.Abs((location.HasRestroom ? 1.0m : 0.0m) - avgHasRestroom) < 0.5m) { matchScore += 0.06m; if (location.HasRestroom) matchedFeatures.Add("Restrooms"); }
-                if (Math.Abs((location.HasAttendant ? 1.0m : 0.0m) - avgHasAttendant) < 0.5m) { matchScore += 0.06m; if (location.HasAttendant) matchedFeatures.Add("Attendant"); }
 
                 var priceDiff = Math.Abs((double)location.PricePerHour - avgPricePerHour);
                 var maxPrice = allProfileLocations.Count > 0 ? allProfileLocations.Max(l => (double)l.PricePerHour) : 0.0;

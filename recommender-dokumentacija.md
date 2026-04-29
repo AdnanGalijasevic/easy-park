@@ -44,19 +44,17 @@ Weighted averages are computed for:
 - disabled spot availability (`SpotType == "Disabled"` and active)
 - `HasRamp`
 - `Is24Hours`
-- `HasOnlinePayment`
 - electric charging availability (`SpotType == "Electric"` and active)
 - covered spot availability (`SpotType == "Covered"` and active)
 - `HasSecurityGuard`
 - `HasWifi`
 - `HasRestroom`
-- `HasAttendant`
 - average `PricePerHour`
 
 ### 2) Candidate Location Score
 
 For each active candidate location:
-- feature similarity: up to `12 * 0.06 = 0.72`
+- feature similarity: up to `10 * 0.06 = 0.60`
 - price similarity: up to `0.15`
 - rating component: `(AverageRating / 5.0) * 0.13`
 - distance bonus (if `lat/lon` provided):

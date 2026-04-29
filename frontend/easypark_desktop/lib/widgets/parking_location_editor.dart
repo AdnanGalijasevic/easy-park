@@ -31,13 +31,11 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
   bool _hasDisabledSpots = false;
   bool _hasRamp = false;
   bool _is24Hours = false;
-  bool _hasOnlinePayment = false;
   bool _hasElectricCharging = false;
   bool _hasCoveredSpots = false;
   bool _hasSecurityGuard = false;
   bool _hasWifi = false;
   bool _hasRestroom = false;
-  bool _hasAttendant = false;
 
   String? _parkingType;
 
@@ -75,13 +73,11 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
       _hasDisabledSpots = location.hasDisabledSpots;
       _hasRamp = location.hasRamp;
       _is24Hours = location.is24Hours;
-      _hasOnlinePayment = location.hasOnlinePayment;
       _hasElectricCharging = location.hasElectricCharging;
       _hasCoveredSpots = location.hasCoveredSpots;
       _hasSecurityGuard = location.hasSecurityGuard;
       _hasWifi = location.hasWifi;
       _hasRestroom = location.hasRestroom;
-      _hasAttendant = location.hasAttendant;
       _parkingType = location.parkingType;
     }
   }
@@ -128,13 +124,11 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
         'hasDisabledSpots': _hasDisabledSpots,
         'hasRamp': _hasRamp,
         'is24Hours': _is24Hours,
-        'hasOnlinePayment': _hasOnlinePayment,
         'hasElectricCharging': _hasElectricCharging,
         'hasCoveredSpots': _hasCoveredSpots,
         'hasSecurityGuard': _hasSecurityGuard,
         'hasWifi': _hasWifi,
         'hasRestroom': _hasRestroom,
-        'hasAttendant': _hasAttendant,
         'parkingType': _parkingType,
         'operatingHours': _operatingHoursController.text.trim().isEmpty
             ? null
@@ -322,11 +316,6 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
                       (v) => setState(() => _is24Hours = v),
                     ),
                     _buildFeatureChip(
-                      'Online Payment',
-                      _hasOnlinePayment,
-                      (v) => setState(() => _hasOnlinePayment = v),
-                    ),
-                    _buildFeatureChip(
                       'Electric Charging',
                       _hasElectricCharging,
                       (v) => setState(() => _hasElectricCharging = v),
@@ -350,11 +339,6 @@ class _ParkingLocationEditorState extends State<ParkingLocationEditor> {
                       'Restroom',
                       _hasRestroom,
                       (v) => setState(() => _hasRestroom = v),
-                    ),
-                    _buildFeatureChip(
-                      'Attendant',
-                      _hasAttendant,
-                      (v) => setState(() => _hasAttendant = v),
                     ),
                   ],
                 ),

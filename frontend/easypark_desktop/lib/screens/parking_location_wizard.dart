@@ -50,11 +50,9 @@ class _ParkingLocationWizardScreenState
 
   bool _hasVideoSurveillance = false;
   bool _hasNightSurveillance = false;
-  bool _hasOnlinePayment = false;
   bool _is24Hours = true;
   bool _hasWifi = false;
   bool _hasRestroom = false;
-  bool _hasAttendant = false;
   bool _hasSecurityGuard = false;
   bool _hasRamp = false;
 
@@ -241,11 +239,9 @@ class _ParkingLocationWizardScreenState
 
     _hasVideoSurveillance = loc.hasVideoSurveillance;
     _hasNightSurveillance = loc.hasNightSurveillance;
-    _hasOnlinePayment = loc.hasOnlinePayment;
     _is24Hours = loc.is24Hours;
     _hasWifi = loc.hasWifi;
     _hasRestroom = loc.hasRestroom;
-    _hasAttendant = loc.hasAttendant;
     _hasSecurityGuard = loc.hasSecurityGuard;
     _hasRamp = loc.hasRamp;
 
@@ -322,11 +318,9 @@ class _ParkingLocationWizardScreenState
 
       'hasVideoSurveillance': _hasVideoSurveillance,
       'hasNightSurveillance': _hasNightSurveillance,
-      'hasOnlinePayment': _hasOnlinePayment,
       'is24Hours': _is24Hours,
       'hasWifi': _hasWifi,
       'hasRestroom': _hasRestroom,
-      'hasAttendant': _hasAttendant,
       'hasSecurityGuard': _hasSecurityGuard,
       'hasRamp': _hasRamp,
       'isActive': true,
@@ -756,18 +750,8 @@ class _ParkingLocationWizardScreenState
                 (v) => _hasSecurityGuard = v,
               ),
               _buildSwitch('Ramp', _hasRamp, (v) => _hasRamp = v),
-              _buildSwitch(
-                'Online Payment',
-                _hasOnlinePayment,
-                (v) => _hasOnlinePayment = v,
-              ),
               _buildSwitch('WiFi', _hasWifi, (v) => _hasWifi = v),
               _buildSwitch('Restroom', _hasRestroom, (v) => _hasRestroom = v),
-              _buildSwitch(
-                'Attendant',
-                _hasAttendant,
-                (v) => _hasAttendant = v,
-              ),
             ],
           ),
         ],
