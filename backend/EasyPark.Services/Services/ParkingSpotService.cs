@@ -166,6 +166,41 @@ namespace EasyPark.Services.Services
             return Mapper.Map<ParkingSpotModel>(entity);
         }
 
+        public override void Delete(int id)
+        {
+            var spot = Context.Set<ParkingSpotDb>()
+                .Include(ps => ps.Reservations)
+                .FirstOrDefault(ps => ps.Id == id);
+
+            if (spot == null)
+            {
+                throw new UserException("Parking spot not found", HttpStatusCode.NotFound);
+            }
+
+            if (spot.Reservations.Any())
+            {
+                var now = DateTime.UtcNow;
+                var activeOrUpcomingCount = spot.Reservations.Count(r =>
+                    r.Status == ReservationStatus.Pending ||
+                    r.Status == ReservationStatus.Confirmed ||
+                    r.Status == ReservationStatus.Active ||
+                    (r.EndTime > now &&
+                     r.Status != ReservationStatus.Cancelled &&
+                     r.Status != ReservationStatus.Expired &&
+                     r.Status != ReservationStatus.Completed)
+                );
+
+                throw new UserException(
+                    activeOrUpcomingCount > 0
+                        ? $"Cannot delete parking spot because it has {activeOrUpcomingCount} active/upcoming reservation(s) and {spot.Reservations.Count} total reservation record(s). Deactivate it instead."
+                        : $"Cannot delete parking spot because it has {spot.Reservations.Count} historical reservation record(s). Deactivate it instead.",
+                    HttpStatusCode.BadRequest
+                );
+            }
+
+            base.Delete(id);
+        }
+
         public override PagedResult<ParkingSpotModel> GetPaged(ParkingSpotSearchObject search)
         {
             var result = new List<ParkingSpotModel>();
