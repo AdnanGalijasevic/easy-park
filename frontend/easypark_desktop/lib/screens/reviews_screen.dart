@@ -5,6 +5,7 @@ import 'package:easypark_desktop/providers/parking_location_provider.dart';
 import 'package:easypark_desktop/providers/review_provider.dart';
 import 'package:easypark_desktop/theme/easy_park_colors.dart';
 import 'package:easypark_desktop/utils/error_message.dart';
+import 'package:easypark_desktop/widgets/pagination_controls.dart';
 
 class ReviewsScreen extends StatefulWidget {
   const ReviewsScreen({super.key});
@@ -20,6 +21,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   List<Review> _reviews = [];
   List<ParkingLocationNameModel> _parkingLocations = [];
   bool _isLoading = true;
+  static const int _pageSize = 20;
+  int _currentPage = 0;
+  int _totalPages = 0;
   int? _ratingFilter;
   int? _parkingLocationFilter;
 
@@ -47,10 +51,15 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       if (_parkingLocationFilter != null) {
         filter['parkingLocationId'] = _parkingLocationFilter;
       }
-      final result = await _reviewProvider.get(filter: filter);
+      final result = await _reviewProvider.get(
+        page: _currentPage,
+        pageSize: _pageSize,
+        filter: filter,
+      );
       if (mounted) {
         setState(() {
           _reviews = result.result;
+          _totalPages = (result.count / _pageSize).ceil();
           _isLoading = false;
         });
       }
@@ -71,6 +80,10 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     try {
       await _reviewProvider.delete(id);
       await _loadReviews();
+      if (_reviews.isEmpty && _currentPage > 0) {
+        setState(() => _currentPage--);
+        await _loadReviews();
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -129,6 +142,18 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     );
   }
 
+  void _goToPreviousPage() {
+    if (_currentPage <= 0) return;
+    setState(() => _currentPage--);
+    _loadReviews();
+  }
+
+  void _goToNextPage() {
+    if (_currentPage >= _totalPages - 1) return;
+    setState(() => _currentPage++);
+    _loadReviews();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -174,7 +199,10 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                   ),
                 ],
                 onChanged: (val) {
-                  setState(() => _parkingLocationFilter = val);
+                  setState(() {
+                    _parkingLocationFilter = val;
+                    _currentPage = 0;
+                  });
                   _loadReviews();
                 },
               ),
@@ -222,97 +250,123 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                   ),
                 ],
                 onChanged: (val) {
-                  setState(() => _ratingFilter = val);
+                  setState(() {
+                    _ratingFilter = val;
+                    _currentPage = 0;
+                  });
                   _loadReviews();
                 },
               ),
             ),
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadReviews),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() => _currentPage = 0);
+              _loadReviews();
+            },
+          ),
           const SizedBox(width: 8),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _reviews.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.rate_review_outlined,
-                    size: 64,
-                    color: EasyParkColors.muted,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'No reviews found',
-                    style: TextStyle(color: EasyParkColors.muted, fontSize: 18),
-                  ),
-                ],
-              ),
-            )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minWidth: constraints.maxWidth,
-                      ),
-                      child: DataTable(
-                        showCheckboxColumn: false,
-                        columns: const [
-                          DataColumn(label: Text('User')),
-                          DataColumn(label: Text('Parking Location')),
-                          DataColumn(label: Text('Rating')),
-                          DataColumn(label: Text('Comment')),
-                          DataColumn(label: Text('Date')),
-                          DataColumn(label: Text('Actions')),
-                        ],
-                        rows: _reviews.map((review) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(review.userFullName)),
-                              DataCell(Text(review.parkingLocationName)),
-                              DataCell(_buildStars(review.rating)),
-                              DataCell(
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 300,
-                                  ),
-                                  child: Text(
-                                    review.comment ?? '—',
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 2,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  '${review.createdAt.day}.${review.createdAt.month}.${review.createdAt.year}',
-                                ),
-                              ),
-                              DataCell(
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: EasyParkColors.error,
-                                  ),
-                                  onPressed: () => _confirmDelete(review),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _reviews.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.rate_review_outlined,
+                          size: 64,
+                          color: EasyParkColors.muted,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'No reviews found',
+                          style: TextStyle(
+                            color: EasyParkColors.muted,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ],
                     ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: constraints.maxWidth,
+                            ),
+                            child: DataTable(
+                              showCheckboxColumn: false,
+                              columns: const [
+                                DataColumn(label: Text('User')),
+                                DataColumn(label: Text('Parking Location')),
+                                DataColumn(label: Text('Rating')),
+                                DataColumn(label: Text('Comment')),
+                                DataColumn(label: Text('Date')),
+                                DataColumn(label: Text('Actions')),
+                              ],
+                              rows: _reviews.map((review) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(review.userFullName)),
+                                    DataCell(Text(review.parkingLocationName)),
+                                    DataCell(_buildStars(review.rating)),
+                                    DataCell(
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 300,
+                                        ),
+                                        child: Text(
+                                          review.comment ?? '—',
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        '${review.createdAt.day}.${review.createdAt.month}.${review.createdAt.year}',
+                                      ),
+                                    ),
+                                    DataCell(
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: EasyParkColors.error,
+                                        ),
+                                        onPressed: () => _confirmDelete(review),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
+          ),
+          const SizedBox(height: 12),
+          PaginationControls(
+            currentPage: _currentPage,
+            totalPages: _totalPages,
+            onPrevious: _goToPreviousPage,
+            onNext: _goToNextPage,
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
 }
